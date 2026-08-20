@@ -199,6 +199,7 @@ pnpm test:smoke   # 内存态验证 创建→评论继续→审核→合并 全�
 
 - `lib/index.js` 为手写源文件，`lib/client.js` 为构建产物（勿手改）。
 - 通过 pnpm `file:` 协议安装后，profile 副本与项目源文件是**硬链接**：`pnpm build` 后源文件即生效，无需手动拷贝；但改 `package.json` 的 `files` 字段或需要彻底重装时，用 `pnpm sync:dsh`。
+- **发布/安装注意**：`package.json` 的 `files` 字段必须包含 `cordis.patch.yml`（`dsh.bundle.patch` 依赖它），否则 GitHub 安装后 DSH 启动会因找不到 overlay 报错；profile 的 `cordis.patch.yml` 中不要再重复 insert `kanban`，否则报 `duplicate loader entry id`。
 - 改 host 端或客户端代码后，都需要**重载 DSH 应用/插件**才生效。
 
 ## 常见问题
