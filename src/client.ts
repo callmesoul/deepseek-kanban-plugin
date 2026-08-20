@@ -44,6 +44,22 @@ function subscribeStore(l: () => void) {
   };
 }
 
+// ── toggle hotkey (Ctrl+K / Cmd+K) ──────────────────────────────────────────
+let toggleHotkeyCleanup: (() => void) | null = null;
+function setupToggleHotkey(): void {
+  toggleHotkeyCleanup?.();
+  const onKeydown = (e: KeyboardEvent) => {
+    const mod = e.ctrlKey || e.metaKey;
+    if (!mod || e.altKey || e.shiftKey) return;
+    if (e.key.toLowerCase() !== 'k') return;
+    e.preventDefault();
+    e.stopPropagation();
+    setOverlayOpen(!getOverlayOpen());
+  };
+  window.addEventListener('keydown', onKeydown, true);
+  toggleHotkeyCleanup = () => window.removeEventListener('keydown', onKeydown, true);
+}
+
 // ── sidebar footer action ───────────────────────────────────────────────────
 function BoardIcon() {
   return createElement(
@@ -142,6 +158,7 @@ export const inject = ['slots', 'remote'];
 
 export async function apply(ctx: any) {
   injectStyles();
+  setupToggleHotkey();
   const remote = ctx.get('remote');
   await remote.$mount(KANBAN_REMOTE);
   const kanbanApi = ctx.get('remote.kanban');
