@@ -2,6 +2,22 @@
 
 DeepSeek Harness（DSH）任务看板插件 —— 在 DSH Web 左侧边栏提供「任务看板」，把**项目、git 分支、AI agent** 串成一条自动化开发流水线：创建任务 → agent 自动领取执行 → 自动提交 → 人工审核 → 自动合并回基础分支。
 
+## 安装
+
+在项目根目录（WSL 环境）执行：
+
+```bash
+cd /home/callmesoul/code/deepseek-kanban-plugin
+pnpm install
+pnpm build
+dsh plugin --profile web add "file:$(pwd)"
+```
+
+安装完成后**重启 / 重载 DSH 应用**，侧边栏底部出现「任务看板」入口即安装成功。
+
+> ⚠️ 路径必须是 WSL 原生路径（`/home/callmesoul/...`），不要使用 `\\wsl.localhost\...` 形式的 Windows 路径。
+> 重新构建后如需强制刷新安装：`dsh plugin --profile web remove @deepseek-kanban/plugin && dsh plugin --profile web add "file:$(pwd)"`
+
 ## 功能特性
 
 - **看板入口**：DSH Web 侧边栏底部「任务看板」按钮，点击打开全屏看板面板（2s 轮询实时刷新）。
