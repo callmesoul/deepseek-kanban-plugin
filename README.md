@@ -4,19 +4,21 @@ DeepSeek Harness（DSH）任务看板插件 —— 在 DSH Web 左侧边栏提�
 
 ## 安装
 
-在项目根目录（WSL 环境）执行：
+从 GitHub 直接安装（推荐）：
 
 ```bash
-cd /home/callmesoul/code/deepseek-kanban-plugin
-pnpm install
-pnpm build
-dsh plugin --profile web add "file:$(pwd)"
+dsh plugin --profile web add "github:callmesoul/deepseek-kanban-plugin"
+```
+
+如需指定版本 / 分支（Tag 或 commit 后跟 `#`）：
+
+```bash
+dsh plugin --profile web add "github:callmesoul/deepseek-kanban-plugin#main"
 ```
 
 安装完成后**重启 / 重载 DSH 应用**，侧边栏底部出现「任务看板」入口即安装成功。
 
-> ⚠️ 路径必须是 WSL 原生路径（`/home/callmesoul/...`），不要使用 `\\wsl.localhost\...` 形式的 Windows 路径。
-> 重新构建后如需强制刷新安装：`dsh plugin --profile web remove @deepseek-kanban/plugin && dsh plugin --profile web add "file:$(pwd)"`
+> 强制刷新安装：`dsh plugin --profile web remove @deepseek-kanban/plugin && dsh plugin --profile web add "github:callmesoul/deepseek-kanban-plugin"`
 
 ## 功能特性
 
@@ -105,6 +107,14 @@ pnpm watch        # 开发时增量构建
 
 ### 安装到 DSH
 
+**普通用户 / 快速体验（从 GitHub 安装）：**
+
+```bash
+dsh plugin --profile web add "github:callmesoul/deepseek-kanban-plugin"
+```
+
+**本地开发（`file:` 协议，硬链接实时生效）：**
+
 ```bash
 # 方式一：直接安装（推荐）
 dsh plugin --profile web add "file:$(pwd)"
@@ -113,7 +123,7 @@ dsh plugin --profile web add "file:$(pwd)"
 pnpm sync:dsh     # 等价于 build + remove + add
 ```
 
-> ⚠️ 路径必须是 WSL 原生路径（`/home/callmesoul/...`），不要用 `\\wsl.localhost\...` 形式的 Windows 路径，否则 pnpm 会报 `ERR_PNPM_LINKED_PKG_DIR_NOT_FOUND`。
+> ⚠️ `file:` 协议路径必须是 WSL 原生路径（`/home/callmesoul/...`），不要用 `\\wsl.localhost\...` 形式的 Windows 路径，否则 pnpm 会报 `ERR_PNPM_LINKED_PKG_DIR_NOT_FOUND`。
 
 安装后**重启 / 重载 DSH 应用**（或重载插件）生效。之后侧边栏底部出现「任务看板」入口。
 
