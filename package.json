@@ -11,7 +11,8 @@
   },
   "files": [
     "lib/index.js",
-    "lib/client.js"
+    "lib/client.js",
+    "cordis.patch.yml"
   ],
   "scripts": {
     "build": "vite build && node scripts/wrap-client.mjs",
