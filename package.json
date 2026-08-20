@@ -20,6 +20,9 @@
     "sync:dsh": "pnpm build && pnpm --dir \"$HOME/.dsh/profiles/web\" remove @deepseek-kanban/plugin && pnpm --dir \"$HOME/.dsh/profiles/web\" add \"file:$(pwd)\""
   },
   "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
     "client": {
       "inject": [
         "@deepseek-ai/dsh-client-runtime",
