@@ -80,6 +80,9 @@ function BoardIcon() {
   );
 }
 
+const IS_MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || '');
+const HOTKEY_LABEL = IS_MAC ? '⌘K' : 'Ctrl+K';
+
 function SidebarKanbanMenu(props: { wide: boolean; onOpen: () => void }) {
   const wide = props.wide;
   const rowStyle: React.CSSProperties = {
@@ -96,11 +99,31 @@ function SidebarKanbanMenu(props: { wide: boolean; onOpen: () => void }) {
     fontSize: 14,
     justifyContent: wide ? 'flex-start' : 'center',
   };
+  const kbdStyle: React.CSSProperties = {
+    marginLeft: 'auto',
+    fontSize: 11,
+    lineHeight: 1,
+    padding: '3px 6px',
+    borderRadius: 6,
+    border: '1px solid var(--dsw-alias-border, rgba(0,0,0,0.15))',
+    background: 'var(--dsw-alias-fill-subtle, rgba(0,0,0,0.05))',
+    color: 'var(--dsw-alias-label-tertiary, #666)',
+    fontFamily: 'inherit',
+    whiteSpace: 'nowrap',
+    opacity: 0.85,
+  };
   return createElement(
     'button',
-    { type: 'button', style: rowStyle, onClick: props.onOpen, title: '任务看板', 'aria-label': '任务看板' },
+    {
+      type: 'button',
+      style: rowStyle,
+      onClick: props.onOpen,
+      title: `任务看板（${HOTKEY_LABEL}）`,
+      'aria-label': `任务看板（${HOTKEY_LABEL}）`,
+    },
     createElement(BoardIcon),
     wide ? createElement('span', null, '任务看板') : null,
+    wide ? createElement('kbd', { style: kbdStyle }, HOTKEY_LABEL) : null,
   );
 }
 
