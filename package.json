@@ -1,0 +1,65 @@
+{
+  "name": "@deepseek-kanban/plugin",
+  "version": "0.1.0",
+  "description": "DeepSeek Harness 任务看板插件（主机状态机 + git 调度 + 浏览器看板 UI）",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib/index.js",
+    "lib/client.js"
+  ],
+  "scripts": {
+    "build": "vite build && node scripts/wrap-client.mjs",
+    "watch": "vite build --watch",
+    "test:smoke": "node scripts/smoke-host.mjs",
+    "sync:dsh": "pnpm build && pnpm --dir \"$HOME/.dsh/profiles/web\" remove @deepseek-kanban/plugin && pnpm --dir \"$HOME/.dsh/profiles/web\" add \"file:$(pwd)\""
+  },
+  "dsh": {
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-runtime",
+        "@deepseek-ai/dsh-client-connection",
+        "@deepseek-ai/dsh-api-gateway",
+        "@deepseek-ai/dsh-api-remotes",
+        "@deepseek-ai/dsh-client-ui-layout",
+        "@deepseek-ai/dsh-client-ui-sidebar",
+        "@deepseek-ai/dsh-client-locale"
+      ],
+      "platform": "web"
+    }
+  },
+  "license": "MIT",
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.1",
+    "@deepseek-ai/dsh-llm": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-storage-domain": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-typert-protocol": "^0.1.0-rc.6",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@internationalized/date": "^3.12.3",
+    "@lucide/vue": "^1.31.0",
+    "@tailwindcss/vite": "^4.1.0",
+    "@types/node": "^26.2.0",
+    "@types/react": "^18.3.1",
+    "@vitejs/plugin-vue": "^5.2.0",
+    "@vueuse/core": "^13.0.0",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "react": "^18.3.1",
+    "reka-ui": "^2.10.3",
+    "shadcn-vue": "^2.8.2",
+    "tailwind-merge": "^3.0.0",
+    "tailwindcss": "^4.1.0",
+    "tw-animate-css": "^1.2.0",
+    "typescript": "^5.7.0",
+    "vite": "^6.0.0",
+    "vue": "^3.5.13",
+    "vue-sonner": "^2.0.9"
+  }
+}
