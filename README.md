@@ -135,7 +135,7 @@ pnpm test:smoke   # 内存态验证 创建→评论继续→审核→合并 全�
 
 ## 使用说明
 
-![看板面板](docs/assets/kanban-board.png)
+![看板面板](https://raw.githubusercontent.com/callmesoul/deepseek-kanban-plugin/main/docs/assets/kanban-board.png)
 
 ### 新建任务
 
@@ -144,7 +144,7 @@ pnpm test:smoke   # 内存态验证 创建→评论继续→审核→合并 全�
 3. 填写标题与描述，可选选择**执行模型**与**执行时间**（留空立即执行，未来时间到点由主机端定时器自动领取）。
 4. 创建后任务进入「待领取」，agent 自动领取执行。
 
-![新建任务](docs/assets/new-task-dialog.png)
+![新建任务](https://raw.githubusercontent.com/callmesoul/deepseek-kanban-plugin/main/docs/assets/new-task-dialog.png)
 
 ### 状态流转
 
