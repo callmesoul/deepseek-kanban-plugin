@@ -23,6 +23,7 @@ dsh plugin --profile web add "github:callmesoul/deepseek-kanban-plugin#main"
 ## 功能特性
 
 - **看板入口**：DSH Web 侧边栏底部「任务看板」按钮，点击打开全屏看板面板（2s 轮询实时刷新）；支持 `Ctrl+K`（macOS 为 `Cmd+K`）快捷键一键打开/关闭。
+- **双视图切换**：看板顶部 Tabs 切换「看板」列视图与「路线图」甘特图视图（参考 GitHub Projects Roadmap：左侧任务列表 + 右侧时间轴，按状态分组泳道、周/月刻度自适应、今天竖线、任务条按状态着色，点击任意任务打开详情）。
 - **任务状态机**：`待领取 → 执行中 → 待审查 → 已审核 → 已完成`，含 `暂停中` 兜底状态。
 - **agent 自动执行**：任务被 agent 领取后自动改码并 `git commit`，无需人工介入。
 - **git 分支隔离**：每个任务使用独立任务分支（`kanban/<id前8>`），执行前自动从基础分支切出。
