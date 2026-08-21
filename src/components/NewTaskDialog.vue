@@ -91,7 +91,11 @@ const selectedModelGroup = computed(() =>
 );
 
 watch(open, (isOpen) => {
-  if (!isOpen) return;
+  if (!isOpen) {
+    pathSuggest.close();
+    form.description = '';
+    return;
+  }
   const id = props.selectedProjectId;
   if (id) selectProject(id);
   if (!createOptions.value) {

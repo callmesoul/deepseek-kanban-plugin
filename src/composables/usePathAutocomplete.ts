@@ -348,7 +348,10 @@ export function usePathAutocomplete(options: PathAutocompleteOptions) {
   function attach() {
     detach();
     const el = resolveElement();
-    if (!el) return;
+    if (!el) {
+      close();
+      return;
+    }
     attachedEl = el;
     el.addEventListener('input', handleInput);
     el.addEventListener('keydown', handleKeydown);
@@ -357,6 +360,8 @@ export function usePathAutocomplete(options: PathAutocompleteOptions) {
   }
 
   watch(() => element.value, attach, { flush: 'post' });
+  // 模型被清空时（如提交后重置、切换任务）强制收起浮层，避免残留。
+  watch(() => model.value, (value) => { if (!value) close(); });
   window.addEventListener('scroll', handleViewportChange, true);
   window.addEventListener('resize', handleViewportChange);
   onBeforeUnmount(() => {
