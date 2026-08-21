@@ -91,6 +91,8 @@ const selectedModelGroup = computed(() =>
 );
 
 watch(open, (isOpen) => {
+  // eslint-disable-next-line no-console
+  console.warn('[new-task-dialog] open changed', { isOpen, description: form.description });
   if (!isOpen) {
     pathSuggest.close();
     form.description = '';
