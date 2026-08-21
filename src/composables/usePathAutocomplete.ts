@@ -9,6 +9,8 @@
  *   - 光标跟随定位（mirror div 测量）、滚动/缩放时重定位。
  */
 import { nextTick, onBeforeUnmount, ref, watch } from 'vue';
+// eslint-disable-next-line no-console
+const debug = (label: string, data?: unknown) => console.warn(`[path-autocomplete] ${label}`, data);
 import type { ComponentPublicInstance } from 'vue';
 
 export interface PathSuggestionItem {
@@ -135,6 +137,12 @@ export function usePathAutocomplete(options: PathAutocompleteOptions) {
   const position = ref({ top: 0, left: 0 });
   const query = ref('');
   const total = ref(0);
+
+  // 追踪 open 的每一次变化，定位“状态自认为关闭但浮层仍显示”的问题。
+  watch(open, (value, oldValue) => {
+    // eslint-disable-next-line no-console
+    console.warn('[path-autocomplete] open changed', { value, oldValue, stack: new Error().stack?.split('\n').slice(2, 8).join(' | ') });
+  }, { immediate: true });
 
   let attachedEl: HTMLTextAreaElement | null = null;
   let tokenStart = -1;
