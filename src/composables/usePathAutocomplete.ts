@@ -113,6 +113,17 @@ function loadEntry(key: string, resolvePaths: () => Promise<string[]> | string[]
   return pending;
 }
 
+/** 给加载操作加超时兜底：远程调用万一挂起，也能明确报错而不是无限转圈。 */
+function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(message)), ms);
+    promise.then(
+      (value) => { clearTimeout(timer); resolve(value); },
+      (err) => { clearTimeout(timer); reject(err); },
+    );
+  });
+}
+
 export function usePathAutocomplete(options: PathAutocompleteOptions) {
   const { element, model, resolvePaths, cacheKey, maxResults = 20 } = options;
 
@@ -228,7 +239,7 @@ export function usePathAutocomplete(options: PathAutocompleteOptions) {
     loading.value = true;
     hasError.value = false;
     try {
-      const entry = await loadEntry(key, resolvePaths);
+      const entry = await withTimeout(loadEntry(key, resolvePaths), 8000, '加载项目目录超时');
       if (seq !== refreshSeq) return;
       applyMatches(entry, trigger.query);
     } catch {
@@ -312,7 +323,9 @@ export function usePathAutocomplete(options: PathAutocompleteOptions) {
   }
 
   function handleClick() {
-    void refresh();
+    // 点击（含点击已有文本中的 "/" token）不应主动弹出补全——
+    // 只有用户实际输入（input 事件）才触发打开；点击仅让已打开的浮层跟随光标重定位。
+    if (open.value) updatePosition();
   }
 
   function handleBlur() {
