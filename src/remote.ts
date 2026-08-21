@@ -37,6 +37,7 @@ export const KANBAN_REMOTE = {
     descriptor('getBoard'),
     descriptor('listCreateTaskOptions'),
     descriptor('listBranches', [inputParam('input')]),
+    descriptor('listProjectPaths', [inputParam('input')]),
     descriptor('createTask', [inputParam('input')]),
     descriptor('moveTask', [inputParam('input')]),
     descriptor('approveTask', [inputParam('input')]),

@@ -6,6 +6,7 @@ export interface KanbanApi {
   getBoard(): Promise<RemoteResult<Board>>;
   listCreateTaskOptions(): Promise<RemoteResult<CreateTaskOptions>>;
   listBranches(input: { projectId: string }): Promise<RemoteResult<{ branches: string[]; current: string }>>;
+  listProjectPaths(input: { projectId: string }): Promise<RemoteResult<{ paths: string[] }>>;
   createTask(input: {
     projectId: string;
     title: string;

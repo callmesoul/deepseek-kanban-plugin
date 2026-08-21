@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
+import type { ComponentPublicInstance } from 'vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -17,6 +18,9 @@ import KanbanStatusBadge from './KanbanStatusBadge.vue';
 import { Textarea } from '@/components/ui/textarea';
 import { Play, Check, Trash2, Send } from '@lucide/vue';
 import { STATUS_LABEL, type Task } from '@/lib/types';
+import { unwrap, useKanbanApi } from '@/lib/bridge';
+import { usePathAutocomplete } from '@/composables/usePathAutocomplete';
+import PathSuggestionList from './PathSuggestionList.vue';
 
 const props = defineProps<{ task: Task | null; busy: boolean }>();
 const emit = defineEmits<{
@@ -27,8 +31,23 @@ const emit = defineEmits<{
   close: [];
 }>();
 
+const api = useKanbanApi();
 const task = computed(() => props.task);
 const commentDraft = ref('');
+
+// 评论输入框的 "/" 路径补全
+const commentTextareaRef = ref<HTMLElement | ComponentPublicInstance | null>(null);
+const commentPathSuggest = usePathAutocomplete({
+  element: commentTextareaRef,
+  model: commentDraft,
+  cacheKey: () => task.value?.projectId ?? null,
+  resolvePaths: async () => {
+    const id = task.value?.projectId;
+    if (!id) return [];
+    const result = await unwrap(api.listProjectPaths({ projectId: id }));
+    return result.paths;
+  },
+});
 const taskBranch = computed(() => task.value?.taskBranch || '—');
 const baseBranch = computed(() => task.value?.baseBranch || '—');
 const canResume = computed(() => task.value?.status === 'paused' || task.value?.status === 'todo');
@@ -47,6 +66,7 @@ watch(
   () => props.task?.id,
   () => {
     commentDraft.value = '';
+    commentPathSuggest.close();
   },
 );
 
@@ -167,12 +187,26 @@ const metaRows = computed(() => {
 
         <SheetFooter class="border-t px-5 py-4">
           <div v-if="canComment" class="flex flex-col gap-2">
-            <Textarea
-              v-model="commentDraft"
-              class="min-h-24"
-              placeholder="给 agent 补充要求或反馈，发送后继续执行…"
-              :disabled="busy"
-            />
+            <div class="relative">
+              <Textarea
+                ref="commentTextareaRef"
+                v-model="commentDraft"
+                class="min-h-24"
+                placeholder="给 agent 补充要求或反馈，发送后继续执行…"
+                :disabled="busy"
+              />
+              <PathSuggestionList
+                :open="commentPathSuggest.open"
+                :loading="commentPathSuggest.loading"
+                :has-error="commentPathSuggest.hasError"
+                :items="commentPathSuggest.items"
+                :active-index="commentPathSuggest.activeIndex"
+                :position="commentPathSuggest.position"
+                :total="commentPathSuggest.total"
+                @select="commentPathSuggest.select"
+                @hover="commentPathSuggest.setActive"
+              />
+            </div>
             <Button
               :disabled="busy || !commentDraft.trim()"
               @click="emit('comment', task.id, commentDraft.trim())"

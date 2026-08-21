@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue';
+import type { ComponentPublicInstance } from 'vue';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -25,7 +26,9 @@ import { Spinner } from '@/components/ui/spinner';
 import { Plus } from '@lucide/vue';
 import { unwrap, useKanbanApi } from '@/lib/bridge';
 import type { CreateTaskOptions, Project } from '@/lib/types';
+import { usePathAutocomplete } from '@/composables/usePathAutocomplete';
 import SchedulePicker from './SchedulePicker.vue';
+import PathSuggestionList from './PathSuggestionList.vue';
 
 const props = defineProps<{
   projects: Project[];
@@ -52,6 +55,7 @@ const createOptions = ref<CreateTaskOptions | null>(null);
 const optionsLoading = ref(false);
 const branches = ref<string[]>([]);
 const branchesLoading = ref(false);
+
 const form = reactive({
   projectId: '',
   baseBranch: '',
@@ -60,6 +64,24 @@ const form = reactive({
   modelProvider: '',
   model: '',
   executeAt: null as string | null,
+});
+
+// 任务描述输入框的 "/" 路径补全
+const descTextareaRef = ref<HTMLElement | ComponentPublicInstance | null>(null);
+const descModel = computed<string>({
+  get: () => form.description,
+  set: (value: string) => {
+    form.description = value;
+  },
+});
+const pathSuggest = usePathAutocomplete({
+  element: descTextareaRef,
+  model: descModel,
+  cacheKey: () => form.projectId || null,
+  resolvePaths: async () => {
+    const result = await unwrap(api.listProjectPaths({ projectId: form.projectId }));
+    return result.paths;
+  },
 });
 const selectedProject = computed(() =>
   props.projects.find((p) => p.id === form.projectId) ?? null,
@@ -281,7 +303,25 @@ function submit() {
 
         <Field>
           <FieldLabel for="kb-desc">任务描述</FieldLabel>
-          <Textarea id="kb-desc" v-model="form.description" placeholder="具体需求、验收标准…" />
+          <div class="relative">
+            <Textarea
+              id="kb-desc"
+              ref="descTextareaRef"
+              v-model="form.description"
+              placeholder="具体需求、验收标准…"
+            />
+            <PathSuggestionList
+              :open="pathSuggest.open"
+              :loading="pathSuggest.loading"
+              :has-error="pathSuggest.hasError"
+              :items="pathSuggest.items"
+              :active-index="pathSuggest.activeIndex"
+              :position="pathSuggest.position"
+              :total="pathSuggest.total"
+              @select="pathSuggest.select"
+              @hover="pathSuggest.setActive"
+            />
+          </div>
         </Field>
       </FieldGroup>
 
