@@ -185,6 +185,8 @@ export async function apply(ctx: any) {
   const remote = ctx.get('remote');
   await remote.$mount(KANBAN_REMOTE);
   const kanbanApi = ctx.get('remote.kanban');
+  // 暴露到 window：作为 useKanbanApi() 的兜底来源，也便于在控制台诊断远程调用。
+  (window as any).__kanbanApi = kanbanApi;
 
   ctx.slots.inject('sidebar.footer.action', () =>
     ctx.slots.register(
