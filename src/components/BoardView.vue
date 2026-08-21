@@ -205,14 +205,14 @@ onUnmounted(() => {
       <TabsContent value="board" class="flex-1 min-h-0">
         <div
           v-if="!board.loaded && board.loading && board.tasks.length === 0"
-          class="grid grid-cols-6 gap-3 flex-1"
+          class="grid grid-cols-6 gap-3 h-full grid-rows-[1fr]"
         >
           <Skeleton v-for="i in 6" :key="i" class="h-full min-h-[200px]" />
         </div>
 
         <div
           v-else
-          class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 flex-1 min-h-0"
+          class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 h-full grid-rows-[1fr]"
         >
           <KanbanColumn
             v-for="col in board.columns"
