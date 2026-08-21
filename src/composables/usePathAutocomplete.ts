@@ -304,8 +304,20 @@ export function usePathAutocomplete(options: PathAutocompleteOptions) {
 
   function close() {
     // eslint-disable-next-line no-console
-    console.warn('[path-autocomplete] close called', { open: open.value });
+    console.warn('[path-autocomplete] close called', { open: open.value, loading: loading.value });
+    // 关闭时同时重置 loading/hasError/items，避免下次 mount 时残留「正在加载」状态。
+    // 这是修复「空白输入框也弹窗且一直显示加载中」的关键：之前 Dialog 关闭后，in-flight 的
+    // loadEntry 仍可能将 loading 保持在 true，下一次 Dialog 打开时 PathSuggestionList mount
+    // 会立刻渲染 loading 态。直接重置掉就不会有残留。
     open.value = false;
+    loading.value = false;
+    hasError.value = false;
+    items.value = [];
+    activeIndex.value = 0;
+    total.value = 0;
+    query.value = '';
+    // 提鲜 refreshSeq，让任何在途的 refresh 提前返回（finally 仍会执行，但 items 不会写入）。
+    refreshSeq += 1;
   }
 
   function setActive(index: number) {
