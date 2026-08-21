@@ -11,10 +11,12 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
-import { RefreshCw } from '@lucide/vue';
+import { LayoutGrid, Map, RefreshCw } from '@lucide/vue';
+import { TabsContent, TabsList, TabsRoot, TabsTrigger } from '@/components/ui/tabs';
 import { useBoard } from '@/composables/useBoard';
 import KanbanColumn from './KanbanColumn.vue';
 import NewTaskDialog from './NewTaskDialog.vue';
+import RoadmapView from './RoadmapView.vue';
 import TaskDetailSheet from './TaskDetailSheet.vue';
 import type { Task, TaskStatus } from '@/lib/types';
 
@@ -188,21 +190,49 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <div v-if="!board.loaded && board.loading && board.tasks.length === 0" class="grid grid-cols-6 gap-3 flex-1">
-      <Skeleton v-for="i in 6" :key="i" class="h-full min-h-[200px]" />
-    </div>
+    <TabsRoot default-value="board" class="flex min-h-0 flex-1 flex-col gap-3">
+      <TabsList class="w-fit">
+        <TabsTrigger value="board">
+          <LayoutGrid />
+          看板
+        </TabsTrigger>
+        <TabsTrigger value="roadmap">
+          <Map />
+          路线图
+        </TabsTrigger>
+      </TabsList>
 
-    <div v-else class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 flex-1 min-h-0">
-      <KanbanColumn
-        v-for="col in board.columns"
-        :key="col.id"
-        :id="col.id"
-        :label="col.label"
-        :tasks="col.tasks"
-        @drop="handleDrop"
-        @open="openDetail"
-      />
-    </div>
+      <TabsContent value="board" class="flex-1 min-h-0">
+        <div
+          v-if="!board.loaded && board.loading && board.tasks.length === 0"
+          class="grid grid-cols-6 gap-3 flex-1"
+        >
+          <Skeleton v-for="i in 6" :key="i" class="h-full min-h-[200px]" />
+        </div>
+
+        <div
+          v-else
+          class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 flex-1 min-h-0"
+        >
+          <KanbanColumn
+            v-for="col in board.columns"
+            :key="col.id"
+            :id="col.id"
+            :label="col.label"
+            :tasks="col.tasks"
+            @drop="handleDrop"
+            @open="openDetail"
+          />
+        </div>
+      </TabsContent>
+
+      <TabsContent value="roadmap" class="flex-1 min-h-0">
+        <div v-if="!board.loaded && board.loading && board.tasks.length === 0" class="h-full">
+          <Skeleton class="h-full min-h-[200px] w-full" />
+        </div>
+        <RoadmapView v-else :tasks="board.selectedTasks" @open="openDetail" />
+      </TabsContent>
+    </TabsRoot>
 
     <TaskDetailSheet
       :task="detailTask"
