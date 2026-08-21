@@ -8,7 +8,7 @@
  *   - 目录选中后自动追加 "/" 并继续展示其子项；
  *   - 光标跟随定位（mirror div 测量）、滚动/缩放时重定位。
  */
-import { nextTick, onBeforeUnmount, ref, watch } from 'vue';
+import { nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue';
 // eslint-disable-next-line no-console
 const debug = (label: string, data?: unknown) => console.warn(`[path-autocomplete] ${label}`, data);
 import type { ComponentPublicInstance } from 'vue';
@@ -429,7 +429,12 @@ export function usePathAutocomplete(options: PathAutocompleteOptions) {
     window.removeEventListener('resize', handleViewportChange);
   });
 
-  return {
+  // 注意：必须用 reactive 包装返回对象。若返回普通对象，`pathSuggest.open` 在
+  // 父组件模板中不会被 Vue 自动解包（普通对象里的 ref 不解包），会以 RefImpl 对象
+  // 传入 PathSuggestionList 的 `open: {type: Boolean}` prop，经 Boolean(RefImpl) 后
+  // 恒为 true，导致「空白也弹窗 + 一直显示加载中」。reactive 会自动解包 ref 属性，
+  // 使 open/loading 等在模板中成为真正的 boolean。
+  return reactive({
     open,
     loading,
     hasError,
@@ -442,5 +447,5 @@ export function usePathAutocomplete(options: PathAutocompleteOptions) {
     setActive,
     close,
     refresh,
-  };
+  });
 }
