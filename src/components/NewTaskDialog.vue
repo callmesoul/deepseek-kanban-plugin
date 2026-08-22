@@ -91,8 +91,6 @@ const selectedModelGroup = computed(() =>
 );
 
 watch(open, (isOpen) => {
-  // eslint-disable-next-line no-console
-  console.warn('[new-task-dialog] open changed', { isOpen, description: form.description });
   if (!isOpen) {
     pathSuggest.close();
     form.description = '';
@@ -328,6 +326,9 @@ function submit() {
               @hover="pathSuggest.setActive"
             />
           </div>
+          <p class="mt-1.5 text-xs text-muted-foreground">
+            输入 <code class="rounded bg-muted px-1 font-mono text-[11px]">/</code> 可快速引用项目文件路径
+          </p>
         </Field>
       </FieldGroup>
 

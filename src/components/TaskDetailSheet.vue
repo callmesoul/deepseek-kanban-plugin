@@ -207,6 +207,9 @@ const metaRows = computed(() => {
                 @hover="commentPathSuggest.setActive"
               />
             </div>
+            <p class="text-xs text-muted-foreground">
+              输入 <code class="rounded bg-muted px-1 font-mono text-[11px]">/</code> 可快速引用项目文件路径
+            </p>
             <Button
               :disabled="busy || !commentDraft.trim()"
               @click="emit('comment', task.id, commentDraft.trim())"

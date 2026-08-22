@@ -9,8 +9,6 @@
  *   - 光标跟随定位（mirror div 测量）、滚动/缩放时重定位。
  */
 import { nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue';
-// eslint-disable-next-line no-console
-const debug = (label: string, data?: unknown) => console.warn(`[path-autocomplete] ${label}`, data);
 import type { ComponentPublicInstance } from 'vue';
 
 export interface PathSuggestionItem {
@@ -138,12 +136,6 @@ export function usePathAutocomplete(options: PathAutocompleteOptions) {
   const query = ref('');
   const total = ref(0);
 
-  // 追踪 open 的每一次变化，定位“状态自认为关闭但浮层仍显示”的问题。
-  watch(open, (value, oldValue) => {
-    // eslint-disable-next-line no-console
-    console.warn('[path-autocomplete] open changed', { value, oldValue, stack: new Error().stack?.split('\n').slice(2, 8).join(' | ') });
-  }, { immediate: true });
-
   let attachedEl: HTMLTextAreaElement | null = null;
   let tokenStart = -1;
   let refreshSeq = 0;
@@ -221,15 +213,6 @@ export function usePathAutocomplete(options: PathAutocompleteOptions) {
 
   async function refresh() {
     const el = attachedEl;
-    // eslint-disable-next-line no-console
-    console.warn('[path-autocomplete] refresh called', {
-      hasEl: !!el,
-      active: el === document.activeElement,
-      value: el?.value,
-      caret: el?.selectionStart,
-      open: open.value,
-      loading: loading.value,
-    });
     if (!el) return;
     if (el !== document.activeElement) {
       close();
@@ -238,8 +221,6 @@ export function usePathAutocomplete(options: PathAutocompleteOptions) {
     const caret = el.selectionStart ?? el.value.length;
     const trigger = parseTrigger(el.value, caret);
     const key = cacheKey();
-    // eslint-disable-next-line no-console
-    console.warn('[path-autocomplete] trigger parse', { trigger, key });
     if (!trigger || key === null || key === undefined) {
       close();
       return;
@@ -258,16 +239,10 @@ export function usePathAutocomplete(options: PathAutocompleteOptions) {
     loading.value = true;
     hasError.value = false;
     try {
-      // eslint-disable-next-line no-console
-      console.warn('[path-autocomplete] loading paths for', key);
       const entry = await withTimeout(loadEntry(key, resolvePaths), 8000, '加载项目目录超时');
-      // eslint-disable-next-line no-console
-      console.warn('[path-autocomplete] loaded', { key, seq, refreshSeq, pathsCount: entry.paths.length });
       if (seq !== refreshSeq) return;
       applyMatches(entry, trigger.query);
-    } catch (err) {
-      // eslint-disable-next-line no-console
-      console.warn('[path-autocomplete] load error', err);
+    } catch {
       if (seq !== refreshSeq) return;
       hasError.value = true;
       items.value = [];
@@ -275,8 +250,6 @@ export function usePathAutocomplete(options: PathAutocompleteOptions) {
       activeIndex.value = 0;
     } finally {
       loading.value = false;
-      // eslint-disable-next-line no-console
-      console.warn('[path-autocomplete] loading finished', { loading: loading.value, open: open.value });
     }
   }
 
@@ -303,12 +276,7 @@ export function usePathAutocomplete(options: PathAutocompleteOptions) {
   }
 
   function close() {
-    // eslint-disable-next-line no-console
-    console.warn('[path-autocomplete] close called', { open: open.value, loading: loading.value });
     // 关闭时同时重置 loading/hasError/items，避免下次 mount 时残留「正在加载」状态。
-    // 这是修复「空白输入框也弹窗且一直显示加载中」的关键：之前 Dialog 关闭后，in-flight 的
-    // loadEntry 仍可能将 loading 保持在 true，下一次 Dialog 打开时 PathSuggestionList mount
-    // 会立刻渲染 loading 态。直接重置掉就不会有残留。
     open.value = false;
     loading.value = false;
     hasError.value = false;
@@ -325,8 +293,6 @@ export function usePathAutocomplete(options: PathAutocompleteOptions) {
   }
 
   function handleInput(e: Event) {
-    // eslint-disable-next-line no-console
-    console.warn('[path-autocomplete] input event', { value: (e.target as HTMLTextAreaElement)?.value, isComposing: (e as InputEvent).isComposing });
     if ((e as InputEvent).isComposing) return;
     void refresh();
   }
@@ -366,16 +332,12 @@ export function usePathAutocomplete(options: PathAutocompleteOptions) {
   }
 
   function handleClick() {
-    // eslint-disable-next-line no-console
-    console.warn('[path-autocomplete] click event', { open: open.value });
     // 点击（含点击已有文本中的 "/" token）不应主动弹出补全——
     // 只有用户实际输入（input 事件）才触发打开；点击仅让已打开的浮层跟随光标重定位。
     if (open.value) updatePosition();
   }
 
   function handleBlur() {
-    // eslint-disable-next-line no-console
-    console.warn('[path-autocomplete] blur event', { open: open.value });
     close();
   }
 
@@ -384,8 +346,6 @@ export function usePathAutocomplete(options: PathAutocompleteOptions) {
   }
 
   function detach() {
-    // eslint-disable-next-line no-console
-    console.warn('[path-autocomplete] detach', { attached: !!attachedEl });
     if (!attachedEl) return;
     attachedEl.removeEventListener('input', handleInput);
     attachedEl.removeEventListener('keydown', handleKeydown);
@@ -397,8 +357,6 @@ export function usePathAutocomplete(options: PathAutocompleteOptions) {
   function attach() {
     detach();
     const el = resolveElement();
-    // eslint-disable-next-line no-console
-    console.warn('[path-autocomplete] attach', { hasEl: !!el });
     if (!el) {
       close();
       return;
@@ -410,15 +368,9 @@ export function usePathAutocomplete(options: PathAutocompleteOptions) {
     el.addEventListener('blur', handleBlur);
   }
 
-  watch(() => element.value, (val, oldVal) => {
-    // eslint-disable-next-line no-console
-    console.warn('[path-autocomplete] element changed', { hasValue: !!val, hadValue: !!oldVal });
-    attach();
-  }, { flush: 'post' });
+  watch(() => element.value, attach, { flush: 'post' });
   // 模型被清空时（如提交后重置、切换任务）强制收起浮层，避免残留。
   watch(() => model.value, (value) => {
-    // eslint-disable-next-line no-console
-    console.warn('[path-autocomplete] model changed', { value, open: open.value });
     if (!value) close();
   });
   window.addEventListener('scroll', handleViewportChange, true);

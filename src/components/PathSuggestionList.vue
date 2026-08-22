@@ -1,10 +1,9 @@
 <script setup lang="ts">
-import { File, Folder, FolderOpen } from '@lucide/vue';
-import { onMounted, onUnmounted, onUpdated, watch } from 'vue';
+import { File, FolderOpen } from '@lucide/vue';
 import { Spinner } from '@/components/ui/spinner';
 import type { PathSuggestionItem } from '@/composables/usePathAutocomplete';
 
-const props = defineProps<{
+defineProps<{
   open: boolean;
   loading: boolean;
   hasError?: boolean;
@@ -18,23 +17,6 @@ const emit = defineEmits<{
   select: [index: number];
   hover: [index: number];
 }>();
-
-onMounted(() => {
-  // eslint-disable-next-line no-console
-  console.warn('[path-suggest-list] mounted', { open: props.open, loading: props.loading });
-});
-onUnmounted(() => {
-  // eslint-disable-next-line no-console
-  console.warn('[path-suggest-list] unmounted');
-});
-onUpdated(() => {
-  // eslint-disable-next-line no-console
-  console.warn('[path-suggest-list] updated', { open: props.open, loading: props.loading, itemsCount: props.items.length });
-});
-watch(() => props.open, (value, oldValue) => {
-  // eslint-disable-next-line no-console
-  console.warn('[path-suggest-list] open prop changed', { value, oldValue });
-});
 </script>
 
 <template>
