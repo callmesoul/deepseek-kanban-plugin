@@ -53,6 +53,13 @@ DSH 是「主机平面 cordis 插件 + 客户端 React 插件」双层架构，�
 - 客户端通过 `ctx.remote.kanban.<method>` 调用主机远程方法（Typert Remote）。
 - 看板实时性：面板打开期间轮询 `getBoard()`（约 2s），避免引入事件推送复杂度。
 
+## 路径补全（`/` 触发）
+
+- 触发点：新建任务的「任务描述」与任务详情的「评论」输入框，输入 `/`（且 token 以 `/` 开头）时弹出项目文件/目录补全浮层。
+- 主机端 `listProjectPaths({ projectId })`：git 项目优先走 `git ls-files --cached --others --exclude-standard`（快、尊重 .gitignore）；非 git 项目或 git 失败时回退带深度/数量上限的目录扫描（跳过 `.git`/`node_modules`/`dist` 等）。
+- 客户端 `usePathAutocomplete`（`src/composables/`）：光标定位用 mirror div 测量像素，浮层绝对定位在 textarea 的 relative 父容器内跟随光标；键盘 ↑/↓ 循环、Enter/Tab 选中、Esc 关闭；目录选中自动追加 `/` 并继续下钻；模块级路径缓存（同一项目只拉取一次）。
+- 注意事项：composable 返回给模板使用的状态需用 `reactive()` 包装——普通对象里的 ref 在 Vue 模板中不会自动解包，会以 `RefImpl` 传入子组件 `Boolean` 类型 prop 恒为 true。
+
 ## 待确认（研究子代理返回后收敛）
 
 - 客户端 bundle 构建格式（`window.__ModuleLoader__.load` CJS factory + react/@deepseek-ai 外部化）。

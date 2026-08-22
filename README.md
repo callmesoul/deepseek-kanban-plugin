@@ -30,6 +30,7 @@ dsh plugin --profile web add "github:callmesoul/deepseek-kanban-plugin#main"
 - **审核合并**：人工「审核通过」后自动 `merge --no-ff` 回基础分支并删除任务分支。
 - **评论并继续**：待审查状态支持评论，agent 恢复原会话继续修改后重新提交。
 - **新建任务配置**：可选执行模型、定时执行时间；基础分支为下拉选择（从项目 git 分支实时获取）。
+- **路径补全**：新建任务的「任务描述」与任务详情的「评论」输入框中，输入 `/` 即弹出当前项目的文件/目录补全浮层，支持 ↑/↓ 选择、Enter/Tab 确认、目录连续下钻（如 `/src/` → `/src/components/`）；git 项目走 `git ls-files`（尊重 .gitignore），非 git 项目回退目录扫描。
 - **改动记录**：任务详情记录每次 agent 执行后的最终输出全文（改动说明/方案/细节），而非 git 统计。
 - **统一工作区**：同一项目的所有看板任务共享同一个「看板任务」工作区分组，不重复创建。
 
@@ -143,6 +144,7 @@ pnpm test:smoke   # 内存态验证 创建→评论继续→审核→合并 全�
 1. 点击看板「新建任务」。
 2. 选择**项目**（来自 DSH 工作区）；选择项目后自动加载该项目 git 分支，作为**基础分支**下拉选项（默认当前分支）。
 3. 填写标题与描述，可选选择**执行模型**与**执行时间**（留空立即执行，未来时间到点由主机端定时器自动领取）。
+   - 在「任务描述」中输入 `/` 可快速引用项目文件路径（同上，评论输入框同样支持）。
 4. 创建后任务进入「待领取」，agent 自动领取执行。
 
 ![新建任务](https://raw.githubusercontent.com/callmesoul/deepseek-kanban-plugin/main/docs/assets/new-task-dialog.png)
@@ -178,6 +180,7 @@ pnpm test:smoke   # 内存态验证 创建→评论继续→审核→合并 全�
 | `getBoard()` | 获取看板全量数据（项目 + 任务 + 状态） |
 | `listCreateTaskOptions()` | 新建任务选项（模型分组 + 默认模型） |
 | `listBranches({ projectId })` | 获取项目 git 分支列表（含当前分支） |
+| `listProjectPaths({ projectId })` | 获取项目文件/目录树（供 `/` 路径补全使用） |
 | `createTask(input)` | 新建任务 |
 | `moveTask({ taskId, to })` | 移动任务状态 |
 | `approveTask({ taskId })` | 审核通过（触发合并） |
