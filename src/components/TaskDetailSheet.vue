@@ -14,7 +14,9 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet';
 import { Spinner } from '@/components/ui/spinner';
+import { TabsContent, TabsList, TabsRoot, TabsTrigger } from '@/components/ui/tabs';
 import KanbanStatusBadge from './KanbanStatusBadge.vue';
+import MarkdownPreview from './MarkdownPreview.vue';
 import { Textarea } from '@/components/ui/textarea';
 import { Play, Check, Trash2, Send } from '@lucide/vue';
 import { STATUS_LABEL, type Task } from '@/lib/types';
@@ -34,6 +36,8 @@ const emit = defineEmits<{
 const api = useKanbanApi();
 const task = computed(() => props.task);
 const commentDraft = ref('');
+// 评论支持 Markdown：编辑 / 预览 双模式
+const commentTab = ref<'write' | 'preview'>('write');
 
 // 评论输入框的 "/" 路径补全
 const commentTextareaRef = ref<HTMLElement | ComponentPublicInstance | null>(null);
@@ -66,6 +70,7 @@ watch(
   () => props.task?.id,
   () => {
     commentDraft.value = '';
+    commentTab.value = 'write';
     commentPathSuggest.close();
   },
 );
@@ -120,17 +125,15 @@ const metaRows = computed(() => {
           <div class="flex flex-col gap-5 px-5 py-4">
             <section class="flex flex-col gap-2">
               <div class="text-xs font-medium text-muted-foreground">任务描述</div>
-              <p class="text-sm whitespace-pre-wrap leading-6">
-                {{ task.description || '（无描述）' }}
-              </p>
+              <MarkdownPreview :content="task.description" placeholder="（无描述）" />
             </section>
 
             <Separator />
 
             <section v-if="task.message" class="flex flex-col gap-2">
               <div class="text-xs font-medium text-muted-foreground">状态说明</div>
-              <div class="rounded-lg border bg-muted/40 p-3 text-sm leading-6 whitespace-pre-wrap">
-                {{ task.message }}
+              <div class="rounded-lg border bg-muted/40 p-3">
+                <MarkdownPreview :content="task.message" />
               </div>
             </section>
 
@@ -163,12 +166,12 @@ const metaRows = computed(() => {
                 <div
                   v-for="comment in comments"
                   :key="comment.id"
-                  class="rounded-lg border bg-muted/40 p-3 text-sm leading-6"
+                  class="rounded-lg border bg-muted/40 p-3"
                 >
                   <div class="mb-1 text-xs text-muted-foreground">
                     {{ new Date(comment.createdAt).toLocaleString() }}
                   </div>
-                  <div class="whitespace-pre-wrap">{{ comment.content }}</div>
+                  <MarkdownPreview :content="comment.content" />
                 </div>
               </div>
               <div v-else class="text-sm text-muted-foreground">暂无评论记录</div>
@@ -187,28 +190,43 @@ const metaRows = computed(() => {
 
         <SheetFooter class="border-t px-5 py-4">
           <div v-if="canComment" class="flex flex-col gap-2">
-            <div class="relative">
-              <Textarea
-                ref="commentTextareaRef"
-                v-model="commentDraft"
-                class="min-h-24"
-                placeholder="给 agent 补充要求或反馈，发送后继续执行…"
-                :disabled="busy"
-              />
-              <PathSuggestionList
-                :open="commentPathSuggest.open"
-                :loading="commentPathSuggest.loading"
-                :has-error="commentPathSuggest.hasError"
-                :items="commentPathSuggest.items"
-                :active-index="commentPathSuggest.activeIndex"
-                :position="commentPathSuggest.position"
-                :total="commentPathSuggest.total"
-                @select="commentPathSuggest.select"
-                @hover="commentPathSuggest.setActive"
-              />
+            <div class="rounded-lg border bg-card">
+              <TabsRoot v-model="commentTab" class="flex flex-col">
+                <TabsList class="h-8 w-fit bg-transparent p-1">
+                  <TabsTrigger value="write" class="h-6 px-2.5 py-0 text-xs">编辑</TabsTrigger>
+                  <TabsTrigger value="preview" class="h-6 px-2.5 py-0 text-xs">预览</TabsTrigger>
+                </TabsList>
+                <TabsContent value="write" class="px-3 pb-3">
+                  <div class="relative">
+                    <Textarea
+                      ref="commentTextareaRef"
+                      v-model="commentDraft"
+                      class="min-h-24"
+                      placeholder="给 agent 补充要求或反馈，发送后继续执行…"
+                      :disabled="busy"
+                    />
+                    <PathSuggestionList
+                      :open="commentPathSuggest.open"
+                      :loading="commentPathSuggest.loading"
+                      :has-error="commentPathSuggest.hasError"
+                      :items="commentPathSuggest.items"
+                      :active-index="commentPathSuggest.activeIndex"
+                      :position="commentPathSuggest.position"
+                      :total="commentPathSuggest.total"
+                      @select="commentPathSuggest.select"
+                      @hover="commentPathSuggest.setActive"
+                    />
+                  </div>
+                </TabsContent>
+                <TabsContent value="preview" class="px-3 pb-3">
+                  <div class="min-h-24 rounded-md border bg-muted/20 px-3 py-2.5">
+                    <MarkdownPreview :content="commentDraft" placeholder="（暂无内容）" />
+                  </div>
+                </TabsContent>
+              </TabsRoot>
             </div>
             <p class="text-xs text-muted-foreground">
-              输入 <code class="rounded bg-muted px-1 font-mono text-[11px]">/</code> 可快速引用项目文件路径
+              支持 Markdown 语法；输入 <code class="rounded bg-muted px-1 font-mono text-[11px]">/</code> 可快速引用项目文件路径
             </p>
             <Button
               :disabled="busy || !commentDraft.trim()"

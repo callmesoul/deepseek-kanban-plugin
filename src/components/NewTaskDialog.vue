@@ -23,10 +23,12 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Spinner } from '@/components/ui/spinner';
+import { TabsContent, TabsList, TabsRoot, TabsTrigger } from '@/components/ui/tabs';
 import { Plus } from '@lucide/vue';
 import { unwrap, useKanbanApi } from '@/lib/bridge';
 import type { CreateTaskOptions, Project } from '@/lib/types';
 import { usePathAutocomplete } from '@/composables/usePathAutocomplete';
+import MarkdownPreview from './MarkdownPreview.vue';
 import SchedulePicker from './SchedulePicker.vue';
 import PathSuggestionList from './PathSuggestionList.vue';
 
@@ -66,6 +68,9 @@ const form = reactive({
   executeAt: null as string | null,
 });
 
+// 任务描述支持 Markdown：编辑 / 预览 双模式
+const descTab = ref<'write' | 'preview'>('write');
+
 // 任务描述输入框的 "/" 路径补全
 const descTextareaRef = ref<HTMLElement | ComponentPublicInstance | null>(null);
 const descModel = computed<string>({
@@ -96,6 +101,7 @@ watch(open, (isOpen) => {
     form.description = '';
     return;
   }
+  descTab.value = 'write';
   const id = props.selectedProjectId;
   if (id) selectProject(id);
   if (!createOptions.value) {
@@ -184,6 +190,7 @@ function submit() {
   form.title = '';
   form.description = '';
   form.executeAt = null;
+  descTab.value = 'write';
   open.value = false;
 }
 </script>
@@ -307,27 +314,43 @@ function submit() {
 
         <Field>
           <FieldLabel for="kb-desc">任务描述</FieldLabel>
-          <div class="relative">
-            <Textarea
-              id="kb-desc"
-              ref="descTextareaRef"
-              v-model="form.description"
-              placeholder="具体需求、验收标准…"
-            />
-            <PathSuggestionList
-              :open="pathSuggest.open"
-              :loading="pathSuggest.loading"
-              :has-error="pathSuggest.hasError"
-              :items="pathSuggest.items"
-              :active-index="pathSuggest.activeIndex"
-              :position="pathSuggest.position"
-              :total="pathSuggest.total"
-              @select="pathSuggest.select"
-              @hover="pathSuggest.setActive"
-            />
+          <div class="rounded-lg border bg-card">
+            <TabsRoot v-model="descTab" class="flex flex-col">
+              <TabsList class="h-8 w-fit bg-transparent p-1">
+                <TabsTrigger value="write" class="h-6 px-2.5 py-0 text-xs">编辑</TabsTrigger>
+                <TabsTrigger value="preview" class="h-6 px-2.5 py-0 text-xs">预览</TabsTrigger>
+              </TabsList>
+              <TabsContent value="write" class="px-3 pb-3">
+                <div class="relative">
+                  <Textarea
+                    id="kb-desc"
+                    ref="descTextareaRef"
+                    v-model="form.description"
+                    class="min-h-28"
+                    placeholder="具体需求、验收标准…"
+                  />
+                  <PathSuggestionList
+                    :open="pathSuggest.open"
+                    :loading="pathSuggest.loading"
+                    :has-error="pathSuggest.hasError"
+                    :items="pathSuggest.items"
+                    :active-index="pathSuggest.activeIndex"
+                    :position="pathSuggest.position"
+                    :total="pathSuggest.total"
+                    @select="pathSuggest.select"
+                    @hover="pathSuggest.setActive"
+                  />
+                </div>
+              </TabsContent>
+              <TabsContent value="preview" class="px-3 pb-3">
+                <div class="min-h-28 rounded-md border bg-muted/20 px-3 py-2.5">
+                  <MarkdownPreview :content="form.description" placeholder="（暂无内容）" />
+                </div>
+              </TabsContent>
+            </TabsRoot>
           </div>
           <p class="mt-1.5 text-xs text-muted-foreground">
-            输入 <code class="rounded bg-muted px-1 font-mono text-[11px]">/</code> 可快速引用项目文件路径
+            支持 Markdown 语法；输入 <code class="rounded bg-muted px-1 font-mono text-[11px]">/</code> 可快速引用项目文件路径
           </p>
         </Field>
       </FieldGroup>
