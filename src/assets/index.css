@@ -181,3 +181,131 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* ── 全局 markdown 排版（MarkdownPreview 与 MarkdownEditor 共用）────────── */
+:where(.dsh-kanban-root) .markdown-body {
+  font-size: 0.875rem;
+  line-height: 1.75;
+  color: var(--foreground);
+  overflow-wrap: break-word;
+}
+:where(.dsh-kanban-root) .markdown-body p {
+  margin: 0.5em 0;
+}
+:where(.dsh-kanban-root) .markdown-body p:first-child {
+  margin-top: 0;
+}
+:where(.dsh-kanban-root) .markdown-body p:last-child {
+  margin-bottom: 0;
+}
+:where(.dsh-kanban-root) .markdown-body h1,
+:where(.dsh-kanban-root) .markdown-body h2,
+:where(.dsh-kanban-root) .markdown-body h3,
+:where(.dsh-kanban-root) .markdown-body h4,
+:where(.dsh-kanban-root) .markdown-body h5,
+:where(.dsh-kanban-root) .markdown-body h6 {
+  margin: 0.9em 0 0.4em;
+  font-weight: 600;
+  line-height: 1.4;
+}
+:where(.dsh-kanban-root) .markdown-body h1 {
+  font-size: 1.25rem;
+}
+:where(.dsh-kanban-root) .markdown-body h2 {
+  font-size: 1.125rem;
+}
+:where(.dsh-kanban-root) .markdown-body h3 {
+  font-size: 1rem;
+}
+:where(.dsh-kanban-root) .markdown-body h4 {
+  font-size: 0.9rem;
+}
+:where(.dsh-kanban-root) .markdown-body ul,
+:where(.dsh-kanban-root) .markdown-body ol {
+  margin: 0.5em 0;
+  padding-left: 1.4em;
+}
+:where(.dsh-kanban-root) .markdown-body ul {
+  list-style: disc;
+}
+:where(.dsh-kanban-root) .markdown-body ol {
+  list-style: decimal;
+}
+:where(.dsh-kanban-root) .markdown-body li {
+  margin: 0.2em 0;
+}
+:where(.dsh-kanban-root) .markdown-body li > ul,
+:where(.dsh-kanban-root) .markdown-body li > ol {
+  margin: 0.2em 0;
+  padding-left: 1.2em;
+}
+:where(.dsh-kanban-root) .markdown-body code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
+  font-size: 0.8125em;
+  background: var(--muted);
+  border-radius: calc(var(--radius) - 4px);
+  padding: 0.15em 0.4em;
+}
+:where(.dsh-kanban-root) .markdown-body pre {
+  margin: 0.6em 0;
+  padding: 0.75em 1em;
+  background: var(--muted);
+  border-radius: var(--radius);
+  overflow-x: auto;
+  line-height: 1.6;
+}
+:where(.dsh-kanban-root) .markdown-body pre code {
+  background: transparent;
+  padding: 0;
+  font-size: 0.8125em;
+}
+:where(.dsh-kanban-root) .markdown-body blockquote {
+  margin: 0.6em 0;
+  padding: 0.15em 0 0.15em 0.9em;
+  border-left: 3px solid var(--border);
+  color: var(--muted-foreground);
+}
+:where(.dsh-kanban-root) .markdown-body blockquote p {
+  margin: 0.3em 0;
+}
+:where(.dsh-kanban-root) .markdown-body a {
+  color: var(--primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+:where(.dsh-kanban-root) .markdown-body table {
+  width: 100%;
+  margin: 0.5em 0;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+:where(.dsh-kanban-root) .markdown-body th,
+:where(.dsh-kanban-root) .markdown-body td {
+  border: 1px solid var(--border);
+  padding: 0.4em 0.6em;
+  text-align: left;
+}
+:where(.dsh-kanban-root) .markdown-body th {
+  background: var(--muted);
+  font-weight: 600;
+}
+:where(.dsh-kanban-root) .markdown-body hr {
+  margin: 1em 0;
+  border: 0;
+  border-top: 1px solid var(--border);
+}
+:where(.dsh-kanban-root) .markdown-body img {
+  max-width: 100%;
+  border-radius: var(--radius);
+}
+:where(.dsh-kanban-root) .markdown-body input[type='checkbox'] {
+  margin-right: 0.4em;
+  vertical-align: -0.15em;
+  accent-color: var(--primary);
+}
+:where(.dsh-kanban-root) .markdown-body strong {
+  font-weight: 600;
+}
+:where(.dsh-kanban-root) .markdown-body del {
+  color: var(--muted-foreground);
+}

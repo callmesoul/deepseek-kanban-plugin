@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue';
-import type { ComponentPublicInstance } from 'vue';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -13,7 +12,6 @@ import {
 } from '@/components/ui/dialog';
 import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
   SelectContent,
@@ -23,15 +21,11 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Spinner } from '@/components/ui/spinner';
-import { TabsContent, TabsList, TabsRoot, TabsTrigger } from '@/components/ui/tabs';
 import { Plus } from '@lucide/vue';
 import { unwrap, useKanbanApi } from '@/lib/bridge';
 import type { CreateTaskOptions, Project } from '@/lib/types';
-import { usePathAutocomplete } from '@/composables/usePathAutocomplete';
-import MarkdownPreview from './MarkdownPreview.vue';
+import MarkdownEditor from './MarkdownEditor.vue';
 import SchedulePicker from './SchedulePicker.vue';
-import PathSuggestionList from './PathSuggestionList.vue';
-
 const props = defineProps<{
   projects: Project[];
   selectedProjectId: string | null;
@@ -68,26 +62,6 @@ const form = reactive({
   executeAt: null as string | null,
 });
 
-// 任务描述支持 Markdown：编辑 / 预览 双模式
-const descTab = ref<'write' | 'preview'>('write');
-
-// 任务描述输入框的 "/" 路径补全
-const descTextareaRef = ref<HTMLElement | ComponentPublicInstance | null>(null);
-const descModel = computed<string>({
-  get: () => form.description,
-  set: (value: string) => {
-    form.description = value;
-  },
-});
-const pathSuggest = usePathAutocomplete({
-  element: descTextareaRef,
-  model: descModel,
-  cacheKey: () => form.projectId || null,
-  resolvePaths: async () => {
-    const result = await unwrap(api.listProjectPaths({ projectId: form.projectId }));
-    return result.paths;
-  },
-});
 const selectedProject = computed(() =>
   props.projects.find((p) => p.id === form.projectId) ?? null,
 );
@@ -97,11 +71,9 @@ const selectedModelGroup = computed(() =>
 
 watch(open, (isOpen) => {
   if (!isOpen) {
-    pathSuggest.close();
     form.description = '';
     return;
   }
-  descTab.value = 'write';
   const id = props.selectedProjectId;
   if (id) selectProject(id);
   if (!createOptions.value) {
@@ -190,7 +162,6 @@ function submit() {
   form.title = '';
   form.description = '';
   form.executeAt = null;
-  descTab.value = 'write';
   open.value = false;
 }
 </script>
@@ -203,7 +174,7 @@ function submit() {
         新建任务
       </Button>
     </DialogTrigger>
-    <DialogContent class="sm:max-w-lg">
+    <DialogContent class="sm:max-w-3xl">
       <DialogHeader>
         <DialogTitle>新建任务</DialogTitle>
         <DialogDescription>选择项目并填写任务信息，创建后 agent 将自动领取并执行。</DialogDescription>
@@ -313,44 +284,36 @@ function submit() {
         </Field>
 
         <Field>
-          <FieldLabel for="kb-desc">任务描述</FieldLabel>
-          <div class="rounded-lg border bg-card">
-            <TabsRoot v-model="descTab" class="flex flex-col">
-              <TabsList class="h-8 w-fit bg-transparent p-1">
-                <TabsTrigger value="write" class="h-6 px-2.5 py-0 text-xs">编辑</TabsTrigger>
-                <TabsTrigger value="preview" class="h-6 px-2.5 py-0 text-xs">预览</TabsTrigger>
-              </TabsList>
-              <TabsContent value="write" class="px-3 pb-3">
-                <div class="relative">
-                  <Textarea
-                    id="kb-desc"
-                    ref="descTextareaRef"
-                    v-model="form.description"
-                    class="min-h-28"
-                    placeholder="具体需求、验收标准…"
-                  />
-                  <PathSuggestionList
-                    :open="pathSuggest.open"
-                    :loading="pathSuggest.loading"
-                    :has-error="pathSuggest.hasError"
-                    :items="pathSuggest.items"
-                    :active-index="pathSuggest.activeIndex"
-                    :position="pathSuggest.position"
-                    :total="pathSuggest.total"
-                    @select="pathSuggest.select"
-                    @hover="pathSuggest.setActive"
-                  />
-                </div>
-              </TabsContent>
-              <TabsContent value="preview" class="px-3 pb-3">
-                <div class="min-h-28 rounded-md border bg-muted/20 px-3 py-2.5">
-                  <MarkdownPreview :content="form.description" placeholder="（暂无内容）" />
-                </div>
-              </TabsContent>
-            </TabsRoot>
+          <div class="flex items-baseline justify-between">
+            <FieldLabel for="kb-desc">任务描述</FieldLabel>
+            <span class="text-[11px] text-muted-foreground">支持 Markdown · 输入即渲染</span>
           </div>
+          <MarkdownEditor
+            id="kb-desc"
+            v-model="form.description"
+            placeholder="支持 Markdown：**加粗**、`代码`、- 列表、[链接](https://…)"
+            :resolve-paths="async () => {
+              const result = await unwrap(api.listProjectPaths({ projectId: form.projectId }));
+              return result.paths;
+            }"
+            :cache-key="() => form.projectId || null"
+          />
+          <details class="mt-2 group rounded-md border bg-muted/30 text-xs">
+            <summary class="flex cursor-pointer select-none items-center justify-between px-3 py-1.5 text-muted-foreground hover:text-foreground">
+              <span>Markdown 语法速查</span>
+              <span class="text-muted-foreground/70 transition-transform duration-200 group-open:rotate-180">▾</span>
+            </summary>
+            <div class="grid grid-cols-2 gap-x-4 gap-y-1 border-t px-3 py-2 font-mono text-[11px]">
+              <span><span class="text-foreground"># 标题</span> <span class="text-muted-foreground">/ ## 二级 / ### 三级</span></span>
+              <span><span class="text-foreground">**加粗**</span> <span class="text-muted-foreground">/ *斜体*</span></span>
+              <span><span class="text-foreground">`行内代码`</span> <span class="text-muted-foreground">/ 代码块 ``` ``` ```</span></span>
+              <span><span class="text-foreground">- 列表</span> <span class="text-muted-foreground">/ 1. 有序 / - [ ] 待办</span></span>
+              <span><span class="text-foreground">&gt; 引用</span> <span class="text-muted-foreground">/ --- 分隔线</span></span>
+              <span><span class="text-foreground">[文字](url)</span> <span class="text-muted-foreground">/ ![描述](图片)</span></span>
+            </div>
+          </details>
           <p class="mt-1.5 text-xs text-muted-foreground">
-            支持 Markdown 语法；输入 <code class="rounded bg-muted px-1 font-mono text-[11px]">/</code> 可快速引用项目文件路径
+            输入 <code class="rounded bg-muted px-1 font-mono text-[11px]">/</code> 可快速引用项目文件路径
           </p>
         </Field>
       </FieldGroup>

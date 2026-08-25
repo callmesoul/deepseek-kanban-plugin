@@ -1,12 +1,17 @@
 /**
  * usePathAutocomplete — "/" 触发的项目目录路径补全。
  *
- * 在 textarea 中输入 "/"（且该 "/" 位于一个以空白分隔的词的起始位置）时，
+ * 支持两类可编辑元素：
+ *   - <textarea>：selectionStart/selectionEnd、value、mirror div 测光标；
+ *   - contenteditable div（WYSIWYG 编辑器）：innerText、Selection/Range、
+ *     range.getClientRects() 测光标、execCommand/insertNode 插入。
+ *
+ * 在输入 "/"（且该 "/" 位于一个以空白分隔的词的起始位置）时，
  * 会基于当前项目（resolvePaths 提供）的文件/目录树弹出补全列表，支持：
  *   - 目录前缀导航："/src/" 只展示 src 的直接子项；
  *   - 键盘操作：↑/↓ 移动、Enter/Tab 选中、Esc 关闭；
  *   - 目录选中后自动追加 "/" 并继续展示其子项；
- *   - 光标跟随定位（mirror div 测量）、滚动/缩放时重定位。
+ *   - 光标跟随定位、滚动/缩放时重定位。
  */
 import { nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue';
 import type { ComponentPublicInstance } from 'vue';
@@ -28,6 +33,8 @@ export interface PathAutocompleteOptions {
   cacheKey: () => string | null;
   /** 列表最大展示条数。 */
   maxResults?: number;
+  /** 浮层定位容器（默认 textarea 的 parentElement；编辑器内部 DOM 多层时需显式指定）。 */
+  positionContainer?: { value: HTMLElement | null | undefined };
 }
 
 interface PathCacheEntry {
@@ -124,9 +131,96 @@ function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promi
   });
 }
 
+/** 判断可编辑元素是否为 textarea。 */
+function isTextarea(el: HTMLElement): el is HTMLTextAreaElement {
+  return el instanceof HTMLTextAreaElement;
+}
+
+/** 读取可编辑元素的纯文本（contenteditable 的 innerText 尾随换行需要去掉）。 */
+function getValue(el: HTMLElement): string {
+  return isTextarea(el) ? el.value : (el.innerText ?? '').replace(/\n+$/, '');
+}
+
+/** 光标在纯文本中的字符偏移。 */
+function getCaret(el: HTMLElement): number {
+  if (isTextarea(el)) return el.selectionStart ?? getValue(el).length;
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0 || !el.contains(sel.anchorNode)) return getValue(el).length;
+  const range = sel.getRangeAt(0);
+  const pre = range.cloneRange();
+  pre.selectNodeContents(el);
+  pre.setEnd(range.startContainer, range.startOffset);
+  return pre.toString().length;
+}
+
+/** 把字符偏移转成内容里的 Range（供 contenteditable 定位）。 */
+function rangeFromOffset(el: HTMLElement, offset: number): Range {
+  const range = document.createRange();
+  if (offset <= 0) {
+    range.setStart(el, 0);
+    range.collapse(true);
+    return range;
+  }
+  const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+  let remaining = offset;
+  while (walker.nextNode()) {
+    const t = walker.currentNode as Text;
+    if (remaining <= t.data.length) {
+      range.setStart(t, remaining);
+      range.collapse(true);
+      return range;
+    }
+    remaining -= t.data.length;
+  }
+  range.selectNodeContents(el);
+  range.collapse(false);
+  return range;
+}
+
+/** 把 selection 设到内容第 offset 个字符处。 */
+function setCaret(el: HTMLElement, offset: number) {
+  if (isTextarea(el)) {
+    el.focus();
+    el.setSelectionRange(offset, offset);
+    return;
+  }
+  const range = rangeFromOffset(el, offset);
+  const sel = window.getSelection();
+  if (!sel) return;
+  sel.removeAllRanges();
+  sel.addRange(range);
+}
+
+/** 删除内容 [start, end) 并插入 insert 文本，光标停在插入文本末尾。 */
+function spliceText(el: HTMLElement, start: number, end: number, insert: string) {
+  if (isTextarea(el)) {
+    const next = getValue(el);
+    const value = next.slice(0, start) + insert + next.slice(end);
+    el.value = value;
+    el.focus();
+    el.setSelectionRange(start + insert.length, start + insert.length);
+    return value;
+  }
+  const sel = window.getSelection();
+  if (!sel) return getValue(el);
+  const range = document.createRange();
+  const startRange = rangeFromOffset(el, start);
+  const endRange = rangeFromOffset(el, end);
+  range.setStart(startRange.startContainer, startRange.startOffset);
+  range.setEnd(endRange.startContainer, endRange.startOffset);
+  range.deleteContents();
+  const node = document.createTextNode(insert);
+  range.insertNode(node);
+  range.setStartAfter(node);
+  range.collapse(true);
+  sel.removeAllRanges();
+  sel.addRange(range);
+  el.focus();
+  return getValue(el);
+}
+
 export function usePathAutocomplete(options: PathAutocompleteOptions) {
   const { element, model, resolvePaths, cacheKey, maxResults = 20 } = options;
-
   const open = ref(false);
   const loading = ref(false);
   const hasError = ref(false);
@@ -136,19 +230,51 @@ export function usePathAutocomplete(options: PathAutocompleteOptions) {
   const query = ref('');
   const total = ref(0);
 
-  let attachedEl: HTMLTextAreaElement | null = null;
+  let attachedEl: HTMLElement | null = null;
   let tokenStart = -1;
   let refreshSeq = 0;
 
-  function resolveElement(): HTMLTextAreaElement | null {
+  function resolveElement(): HTMLElement | null {
     const raw = element.value;
     if (!raw) return null;
     const root = '$el' in raw ? raw.$el : raw;
-    return root instanceof HTMLTextAreaElement ? root : null;
+    if (root instanceof HTMLTextAreaElement) return root;
+    if (root instanceof HTMLElement && root.isContentEditable) return root;
+    return null;
   }
 
-  /** 用 mirror div 测量光标在 textarea 内的像素位置（含 padding、随滚动位移）。 */
-  function caretCoordinates(el: HTMLTextAreaElement, pos: number) {
+  /** 用 mirror div 测量 textarea 光标像素位置；contenteditable 用 Selection rect。 */
+  function caretCoordinates(el: HTMLElement, pos: number) {
+    if (!isTextarea(el)) {
+      const sel = window.getSelection();
+      const elRect = el.getBoundingClientRect();
+      if (sel && sel.rangeCount > 0 && el.contains(sel.anchorNode)) {
+        const range = sel.getRangeAt(0);
+        const rects = range.getClientRects();
+        const lineHeight = parseFloat(getComputedStyle(el).lineHeight) || 20;
+        if (rects.length > 0) {
+          const r = rects[0];
+          return {
+            left: r.left - elRect.left - el.scrollLeft,
+            top: r.top - elRect.top - el.scrollTop,
+            height: r.height || lineHeight,
+          };
+        }
+        // 退化 rect 兜底：用焦点节点所在行的 rect
+        const start = range.startContainer;
+        if (start instanceof Element) {
+          const sRect = start.getBoundingClientRect();
+          return {
+            left: sRect.left - elRect.left - el.scrollLeft,
+            top: sRect.top - elRect.top - el.scrollTop,
+            height: lineHeight,
+          };
+        }
+      }
+      const wrap = el.parentElement as HTMLElement | null;
+      const wrapRect = wrap?.getBoundingClientRect() ?? elRect;
+      return { left: 4, top: 4, height: 20, wrapRect };
+    }
     const mirror = document.createElement('div');
     const computed = window.getComputedStyle(el);
     for (const p of CARET_STYLE_PROPS) {
@@ -181,12 +307,12 @@ export function usePathAutocomplete(options: PathAutocompleteOptions) {
     };
   }
 
-  /** 把浮层定位到光标下方（相对 textarea 的 relative 父容器）。 */
+  /** 把浮层定位到光标下方（相对定位容器，默认 textarea 的父元素）。 */
   function updatePosition() {
     const el = attachedEl;
-    const wrap = el?.parentElement as HTMLElement | null;
+    const wrap = options.positionContainer?.value ?? el?.parentElement as HTMLElement | null;
     if (!el || !wrap) return;
-    const caret = el.selectionStart ?? el.value.length;
+    const caret = getCaret(el);
     const coords = caretCoordinates(el, caret);
     const x = coords.left - el.scrollLeft;
     const y = coords.top - el.scrollTop;
@@ -218,8 +344,8 @@ export function usePathAutocomplete(options: PathAutocompleteOptions) {
       close();
       return;
     }
-    const caret = el.selectionStart ?? el.value.length;
-    const trigger = parseTrigger(el.value, caret);
+    const caret = getCaret(el);
+    const trigger = parseTrigger(getValue(el), caret);
     const key = cacheKey();
     if (!trigger || key === null || key === undefined) {
       close();
@@ -257,19 +383,18 @@ export function usePathAutocomplete(options: PathAutocompleteOptions) {
     const el = attachedEl;
     const item = items.value[index];
     if (!el || !item) return;
-    const caret = el.selectionStart ?? el.value.length;
+    const caret = getCaret(el);
     const tail = item.isDir ? '/' : '';
     const insert = `/${item.path}${tail}`;
-    const newValue = el.value.slice(0, tokenStart) + insert + el.value.slice(caret);
+    const value = spliceText(el, tokenStart, caret, insert);
     const newCaret = tokenStart + insert.length;
     tokenStart = -1;
     open.value = false;
-    model.value = newValue;
+    model.value = value;
     void nextTick(() => {
       const current = attachedEl;
       if (!current) return;
-      current.focus();
-      current.setSelectionRange(newCaret, newCaret);
+      setCaret(current, newCaret);
       // 选中目录后立即展示其子项，形成连续导航。
       if (item.isDir) void refresh();
     });

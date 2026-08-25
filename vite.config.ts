@@ -26,6 +26,11 @@ export default defineConfig({
     minify: 'esbuild',
     rollupOptions: {
       external: ['react', 'react/jsx-runtime', 'react-dom', 'react-dom/client'],
+      output: {
+        // 插件以单文件分发（lib/client.js），任何动态 import 都必须内联进主 chunk，
+        // 否则会被拆成独立文件导致产物残缺。
+        inlineDynamicImports: true,
+      },
     },
   },
 });
