@@ -204,7 +204,6 @@ function KanbanOverlay(props: { kanbanApi: KanbanApi }) {
     overflow: 'hidden',
     display: 'flex',
     flexDirection: 'column',
-    boxShadow: '-20px 0 60px rgba(0,0,0,0.35)',
   };
 
   return createElement(
