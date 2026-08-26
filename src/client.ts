@@ -7,7 +7,7 @@
  *   kanban app (see `./kanban-entry`).
  */
 import * as React from 'react';
-import { createElement, useEffect, useRef, useSyncExternalStore } from 'react';
+import { createElement, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { KANBAN_REMOTE } from './remote';
 import { mountKanban } from './kanban-entry';
 import type { KanbanApi } from './lib/bridge';
@@ -118,6 +118,7 @@ function SidebarKanbanMenu(props: { wide: boolean; onOpen: () => void }) {
       type: 'button',
       style: rowStyle,
       onClick: props.onOpen,
+      'data-kanban-toggle': true,
       title: `任务看板（${HOTKEY_LABEL}）`,
       'aria-label': `任务看板（${HOTKEY_LABEL}）`,
     },
@@ -133,6 +134,7 @@ function KanbanOverlay(props: { kanbanApi: KanbanApi }) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const apiRef = useRef(props.kanbanApi);
   apiRef.current = props.kanbanApi;
+  const [sidebarWidth, setSidebarWidth] = useState(0);
 
   useEffect(() => {
     const el = hostRef.current;
@@ -143,36 +145,72 @@ function KanbanOverlay(props: { kanbanApi: KanbanApi }) {
     };
   }, [open]);
 
+  useLayoutEffect(() => {
+    if (!open) return;
+    const node = hostRef.current;
+    const overlayLayer = node?.closest('[data-shell-overlay]') as HTMLElement | null;
+    const frame = overlayLayer?.parentElement ?? null;
+    if (!frame) return;
+
+    const measure = () => {
+      const tracks = getComputedStyle(frame).gridTemplateColumns;
+      const px = parseFloat(tracks);
+      if (Number.isFinite(px) && px >= 0) setSidebarWidth(px);
+    };
+    measure();
+
+    const ro = new ResizeObserver(measure);
+    ro.observe(frame);
+    const mo = new MutationObserver(measure);
+    mo.observe(frame, { attributes: true, attributeFilter: ['style'] });
+    window.addEventListener('resize', measure);
+
+    return () => {
+      ro.disconnect();
+      mo.disconnect();
+      window.removeEventListener('resize', measure);
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const node = hostRef.current;
+    const overlayLayer = node?.closest('[data-shell-overlay]') as HTMLElement | null;
+    const frame = overlayLayer?.parentElement ?? null;
+    const sidebarCol = frame?.firstElementChild as HTMLElement | null;
+    if (!sidebarCol) return;
+
+    const onSidebarClick = (e: MouseEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (t && sidebarCol.contains(t) && !t.closest('[data-kanban-toggle]')) {
+        setOverlayOpen(false);
+      }
+    };
+    document.addEventListener('click', onSidebarClick, true);
+    return () => document.removeEventListener('click', onSidebarClick, true);
+  }, [open]);
+
   if (!open) return null;
 
-  const backdropStyle: React.CSSProperties = {
-    position: 'fixed',
-    inset: 0,
-    background: 'rgba(0,0,0,0.45)',
-    pointerEvents: 'auto',
-    display: 'flex',
-    alignItems: 'stretch',
-    justifyContent: 'stretch',
-    padding: '24px',
-    zIndex: 10000,
-  };
   const panelStyle: React.CSSProperties = {
-    flex: 1,
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: sidebarWidth,
     background: 'var(--dsw-alias-panel-fill, #fff)',
     color: 'var(--dsw-alias-label-primary, #111)',
-    borderRadius: 12,
+    borderLeft: '1px solid var(--dsw-alias-border-l2, rgba(0,0,0,0.12))',
     overflow: 'hidden',
     display: 'flex',
     flexDirection: 'column',
-    boxShadow: '0 20px 60px rgba(0,0,0,0.35)',
+    boxShadow: '-20px 0 60px rgba(0,0,0,0.35)',
   };
 
   return createElement(
     'div',
-    { style: backdropStyle, onClick: (e: any) => e.target === e.currentTarget && setOverlayOpen(false) },
-    createElement('div', { style: panelStyle, onClick: (e: any) => e.stopPropagation() },
-      createElement('div', { ref: hostRef, style: { flex: 1, minHeight: 0 } }),
-    ),
+    { style: panelStyle },
+    createElement('div', { ref: hostRef, style: { flex: 1, minHeight: 0 } }),
   );
 }
 
@@ -194,7 +232,7 @@ export async function apply(ctx: any) {
         name: 'sidebar.footer.action',
         id: 'kanban',
         order: 50,
-        inject: () => ({ onOpen: () => setOverlayOpen(true) }),
+        inject: () => ({ onOpen: () => setOverlayOpen(!getOverlayOpen()) }),
       },
       SidebarKanbanMenu as any,
     ),
