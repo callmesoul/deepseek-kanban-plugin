@@ -1,6 +1,6 @@
 {
   "name": "@deepseek-kanban/plugin",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "DeepSeek Harness 任务看板插件（主机状态机 + git 调度 + 浏览器看板 UI）",
   "type": "module",
   "main": "lib/index.js",
@@ -13,6 +13,7 @@
     "lib/index.js",
     "lib/client.js",
     "cordis.patch.yml",
+    "CHANGELOG.md",
     "docs/assets"
   ],
   "scripts": {
@@ -52,7 +53,7 @@
     "@tailwindcss/vite": "^4.1.0",
     "@types/node": "^26.2.0",
     "@types/react": "^18.3.1",
-    "@vitejs/plugin-vue": "^5.2.0",
+    "@vitejs/plugin-vue": "^6.0.8",
     "@vueuse/core": "^13.0.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

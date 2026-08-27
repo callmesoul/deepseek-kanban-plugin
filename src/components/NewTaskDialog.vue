@@ -23,8 +23,14 @@ import {
 import { Spinner } from '@/components/ui/spinner';
 import { Plus } from '@lucide/vue';
 import { unwrap, useKanbanApi } from '@/lib/bridge';
+import { projectFilesFromPaths } from '@/lib/project-files';
 import type { CreateTaskOptions, Project } from '@/lib/types';
-import MarkdownEditor from './MarkdownEditor.vue';
+import {
+  AgentComposer,
+  formatComposerText,
+  type AgentComposerSubmitPayload,
+  type ProjectFile,
+} from './agent-composer';
 import SchedulePicker from './SchedulePicker.vue';
 const props = defineProps<{
   projects: Project[];
@@ -51,6 +57,10 @@ const createOptions = ref<CreateTaskOptions | null>(null);
 const optionsLoading = ref(false);
 const branches = ref<string[]>([]);
 const branchesLoading = ref(false);
+const projectFilesCache = new Map<string, Promise<ProjectFile[]>>();
+const descriptionComposerRef = ref<{
+  getPayload: () => AgentComposerSubmitPayload;
+} | null>(null);
 
 const form = reactive({
   projectId: '',
@@ -148,12 +158,32 @@ function selectModelProvider(id: string) {
   form.model = group?.models[0]?.id ?? '';
 }
 
+function resolveProjectFiles() {
+  const projectId = form.projectId;
+  if (!projectId) return Promise.resolve([]);
+
+  const cached = projectFilesCache.get(projectId);
+  if (cached) return cached;
+
+  const pending = unwrap(api.listProjectPaths({ projectId }))
+    .then(({ paths }) => projectFilesFromPaths(paths))
+    .catch((error) => {
+      projectFilesCache.delete(projectId);
+      throw error;
+    });
+  projectFilesCache.set(projectId, pending);
+  return pending;
+}
+
 function submit() {
   if (!form.projectId || !form.title.trim()) return;
+  const description = descriptionComposerRef.value
+    ? formatComposerText(descriptionComposerRef.value.getPayload())
+    : form.description.trim();
   emit('create', {
     projectId: form.projectId,
     title: form.title.trim(),
-    description: form.description.trim(),
+    description,
     baseBranch: form.baseBranch.trim(),
     modelProvider: form.modelProvider || undefined,
     model: form.model || undefined,
@@ -286,35 +316,20 @@ function submit() {
         <Field>
           <div class="flex items-baseline justify-between">
             <FieldLabel for="kb-desc">任务描述</FieldLabel>
-            <span class="text-[11px] text-muted-foreground">支持 Markdown · 输入即渲染</span>
+            <span class="text-[11px] text-muted-foreground">输入 @ 引用项目文件</span>
           </div>
-          <MarkdownEditor
-            id="kb-desc"
+          <AgentComposer
+            ref="descriptionComposerRef"
             v-model="form.description"
-            placeholder="支持 Markdown：**加粗**、`代码`、- 列表、[链接](https://…)"
-            :resolve-paths="async () => {
-              const result = await unwrap(api.listProjectPaths({ projectId: form.projectId }));
-              return result.paths;
-            }"
-            :cache-key="() => form.projectId || null"
+            input-id="kb-desc"
+            aria-label="任务描述"
+            :project-root="selectedProject?.path ?? ''"
+            :resolve-files="resolveProjectFiles"
+            placeholder="描述任务，输入 @ 引用项目文件…"
+            :show-directory="false"
+            :submit-on-enter="false"
+            :show-shortcut-hint="false"
           />
-          <details class="mt-2 group rounded-md border bg-muted/30 text-xs">
-            <summary class="flex cursor-pointer select-none items-center justify-between px-3 py-1.5 text-muted-foreground hover:text-foreground">
-              <span>Markdown 语法速查</span>
-              <span class="text-muted-foreground/70 transition-transform duration-200 group-open:rotate-180">▾</span>
-            </summary>
-            <div class="grid grid-cols-2 gap-x-4 gap-y-1 border-t px-3 py-2 font-mono text-[11px]">
-              <span><span class="text-foreground"># 标题</span> <span class="text-muted-foreground">/ ## 二级 / ### 三级</span></span>
-              <span><span class="text-foreground">**加粗**</span> <span class="text-muted-foreground">/ *斜体*</span></span>
-              <span><span class="text-foreground">`行内代码`</span> <span class="text-muted-foreground">/ 代码块 ``` ``` ```</span></span>
-              <span><span class="text-foreground">- 列表</span> <span class="text-muted-foreground">/ 1. 有序 / - [ ] 待办</span></span>
-              <span><span class="text-foreground">&gt; 引用</span> <span class="text-muted-foreground">/ --- 分隔线</span></span>
-              <span><span class="text-foreground">[文字](url)</span> <span class="text-muted-foreground">/ ![描述](图片)</span></span>
-            </div>
-          </details>
-          <p class="mt-1.5 text-xs text-muted-foreground">
-            输入 <code class="rounded bg-muted px-1 font-mono text-[11px]">/</code> 可快速引用项目文件路径
-          </p>
         </Field>
       </FieldGroup>
 

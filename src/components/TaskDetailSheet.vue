@@ -13,9 +13,15 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet';
 import { Spinner } from '@/components/ui/spinner';
+import { projectFilesFromPaths } from '@/lib/project-files';
 import KanbanStatusBadge from './KanbanStatusBadge.vue';
 import MarkdownPreview from './MarkdownPreview.vue';
-import MarkdownEditor from './MarkdownEditor.vue';
+import {
+  AgentComposer,
+  formatComposerText,
+  type AgentComposerSubmitPayload,
+  type ProjectFile,
+} from './agent-composer';
 import { Play, Check, Trash2, Send } from '@lucide/vue';
 import { STATUS_LABEL, type Task } from '@/lib/types';
 import { unwrap, useKanbanApi } from '@/lib/bridge';
@@ -32,6 +38,7 @@ const emit = defineEmits<{
 const api = useKanbanApi();
 const task = computed(() => props.task);
 const commentDraft = ref('');
+const projectFilesCache = new Map<string, Promise<ProjectFile[]>>();
 
 const taskBranch = computed(() => task.value?.taskBranch || '—');
 const baseBranch = computed(() => task.value?.baseBranch || '—');
@@ -45,6 +52,29 @@ function changeSourceLabel(source: 'agent' | 'git' | 'system') {
   if (source === 'agent') return 'Agent 说明';
   if (source === 'git') return 'Git 变更';
   return '系统记录';
+}
+
+function resolveProjectFiles() {
+  const projectId = task.value?.projectId;
+  if (!projectId) return Promise.resolve([]);
+
+  const cached = projectFilesCache.get(projectId);
+  if (cached) return cached;
+
+  const pending = unwrap(api.listProjectPaths({ projectId }))
+    .then(({ paths }) => projectFilesFromPaths(paths))
+    .catch((error) => {
+      projectFilesCache.delete(projectId);
+      throw error;
+    });
+  projectFilesCache.set(projectId, pending);
+  return pending;
+}
+
+function submitComment(payload: AgentComposerSubmitPayload) {
+  const comment = formatComposerText(payload);
+  if (!task.value || !comment) return;
+  emit('comment', task.value.id, comment);
 }
 
 watch(
@@ -171,46 +201,26 @@ const metaRows = computed(() => {
           <div v-if="canComment" class="flex flex-col gap-2">
             <div class="flex items-baseline justify-between">
               <span class="text-xs font-medium text-foreground">评论</span>
-              <span class="text-[11px] text-muted-foreground">支持 Markdown · 输入即渲染</span>
+              <span class="text-[11px] text-muted-foreground">输入 @ 引用项目文件</span>
             </div>
-            <MarkdownEditor
+            <AgentComposer
               v-model="commentDraft"
-              placeholder="支持 Markdown：**加粗**、`代码`、- 列表、[链接](https://…)"
+              :project-root="task.worktreePath"
+              :resolve-files="resolveProjectFiles"
+              placeholder="输入评论，使用 @ 引用项目文件…"
               :disabled="busy"
-              :min-height="180"
-              :resolve-paths="async () => {
-                const id = task?.projectId;
-                if (!id) return [];
-                const result = await unwrap(api.listProjectPaths({ projectId: id }));
-                return result.paths;
-              }"
-              :cache-key="() => task?.projectId ?? null"
-            />
-            <details class="group rounded-md border bg-muted/30 text-xs">
-              <summary class="flex cursor-pointer select-none items-center justify-between px-3 py-1.5 text-muted-foreground hover:text-foreground">
-                <span>Markdown 语法速查</span>
-                <span class="text-muted-foreground/70 transition-transform duration-200 group-open:rotate-180">▾</span>
-              </summary>
-              <div class="grid grid-cols-2 gap-x-4 gap-y-1 border-t px-3 py-2 font-mono text-[11px]">
-                <span><span class="text-foreground"># 标题</span> <span class="text-muted-foreground">/ ## 二级 / ### 三级</span></span>
-                <span><span class="text-foreground">**加粗**</span> <span class="text-muted-foreground">/ *斜体*</span></span>
-                <span><span class="text-foreground">`行内代码`</span> <span class="text-muted-foreground">/ 代码块 ``` ``` ```</span></span>
-                <span><span class="text-foreground">- 列表</span> <span class="text-muted-foreground">/ 1. 有序 / - [ ] 待办</span></span>
-                <span><span class="text-foreground">&gt; 引用</span> <span class="text-muted-foreground">/ --- 分隔线</span></span>
-                <span><span class="text-foreground">[文字](url)</span> <span class="text-muted-foreground">/ ![描述](图片)</span></span>
-              </div>
-            </details>
-            <p class="text-xs text-muted-foreground">
-              输入 <code class="rounded bg-muted px-1 font-mono text-[11px]">/</code> 可快速引用项目文件路径
-            </p>
-            <Button
-              :disabled="busy || !commentDraft.trim()"
-              @click="emit('comment', task.id, commentDraft.trim())"
+              :show-directory="false"
+              :clear-on-submit="false"
+              @submit="submitComment"
             >
-              <Spinner v-if="busy" data-icon="inline-start" />
-              <Send v-else data-icon="inline-start" />
-              评论并继续
-            </Button>
+              <template #actions="{ submit, canSubmit }">
+                <Button size="sm" :disabled="busy || !canSubmit" @click="submit">
+                  <Spinner v-if="busy" data-icon="inline-start" />
+                  <Send v-else data-icon="inline-start" />
+                  评论并继续
+                </Button>
+              </template>
+            </AgentComposer>
           </div>
           <Button
             v-if="canResume"

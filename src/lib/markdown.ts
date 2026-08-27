@@ -33,5 +33,7 @@ export function renderMarkdown(text: string): string {
   // 保留任务列表 checkbox 与链接属性，其余一律按 DOMPurify 默认白名单。
   return DOMPurify.sanitize(raw, {
     ADD_ATTR: ['type', 'checked', 'disabled', 'target', 'rel'],
+    ADD_DATA_URI_TAGS: ['img'],
+    ALLOWED_URI_REGEXP: /^(?:(?:(?:f|ht)tps?|file|mailto|tel|callto|cid|xmpp):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i,
   });
 }

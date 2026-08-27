@@ -22,16 +22,18 @@ dsh plugin --profile web add "github:callmesoul/deepseek-kanban-plugin#main"
 
 ## 功能特性
 
-- **看板入口**：DSH Web 侧边栏底部「任务看板」按钮，点击打开全屏看板面板（2s 轮询实时刷新）；支持 `Ctrl+K`（macOS 为 `Cmd+K`）快捷键一键打开/关闭。
+- **看板入口**：DSH Web 侧边栏底部「任务看板」按钮，点击打开全屏看板面板（4s 轮询实时刷新，页面不可见时自动暂停轮询）；支持 `Ctrl+K`（macOS 为 `Cmd+K`）快捷键一键打开/关闭。
 - **双视图切换**：看板顶部 Tabs 切换「看板」列视图与「路线图」甘特图视图（参考 GitHub Projects Roadmap：左侧任务列表 + 右侧时间轴，按状态分组泳道、周/月刻度自适应、今天竖线、任务条按状态着色，点击任意任务打开详情）。
-- **任务状态机**：`待领取 → 执行中 → 待审查 → 已审核 → 已完成`，含 `暂停中` 兜底状态。
+- **任务状态机**：`待领取 → 执行中 → 待审查 → 已审核 → 已完成`，含 `暂停中` 兜底状态。支持看板列间拖拽手动流转。
+- **Agent 输入框**：新建任务描述与任务详情评论统一使用 [agent-textarea](https://github.com/callmesoul/agent-textarea) 的 Agent Composer，支持项目文件引用、附件预览、拖放和剪贴板粘贴；附件按 `file://` 路径引用交给 agent，不上传文件内容。
+- **文件引用**：在输入框中输入 `@` 即弹出当前项目的文件/目录候选，支持 ↑/↓ 选择、Enter/Tab 确认、Esc 关闭；git 项目走 `git ls-files`（尊重 .gitignore），非 git 项目回退目录扫描。
 - **agent 自动执行**：任务被 agent 领取后自动改码并 `git commit`，无需人工介入。
-- **git 分支隔离**：每个任务使用独立任务分支（`kanban/<id前8>`），执行前自动从基础分支切出。
-- **审核合并**：人工「审核通过」后自动 `merge --no-ff` 回基础分支并删除任务分支。
-- **评论并继续**：待审查状态支持评论，agent 恢复原会话继续修改后重新提交。
+- **git worktree 隔离**：每个任务使用独立 git worktree（`git worktree add`）+ 独立任务分支（`kanban/<id前8>`），从基础分支签出，不影响主工作区。
+- **审核合并**：人工「审核通过」后自动 `merge --no-ff` 回基础分支并删除任务分支与 worktree。
+- **评论并继续**：待审查状态支持评论，尝试恢复原 agent 会话追加 followup 继续（恢复失败时回退为新建 agent 追加评论），修改后重新提交。
 - **新建任务配置**：可选执行模型、定时执行时间；基础分支为下拉选择（从项目 git 分支实时获取）。
-- **路径补全**：新建任务的「任务描述」与任务详情的「评论」输入框中，输入 `/` 即弹出当前项目的文件/目录补全浮层，支持 ↑/↓ 选择、Enter/Tab 确认、目录连续下钻（如 `/src/` → `/src/components/`）；git 项目走 `git ls-files`（尊重 .gitignore），非 git 项目回退目录扫描。
-- **改动记录**：任务详情记录每次 agent 执行后的最终输出全文（改动说明/方案/细节），而非 git 统计。
+- **改动记录**：任务详情记录每次 agent 执行后的改动说明（优先取 agent 最终输出全文，回退 git 变更摘要或系统消息），标注来源（agent / git / system）与 commit hash。
+- **定时执行恢复**：设了定时执行的任务，DSH 重启后自动恢复定时器，到点自动领取。
 - **统一工作区**：同一项目的所有看板任务共享同一个「看板任务」工作区分组，不重复创建。
 
 ## 架构概览
@@ -57,9 +59,9 @@ DSH 是「主机平面 cordis 插件 + 客户端插件」双层架构，本插�
 └────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-- **主机端**（`lib/index.js`）：状态机、git 调度、agent 执行、数据持久化。
+- **主机端**（`lib/index.js`）：状态机、git worktree 调度、agent 执行、数据持久化。
 - **客户端**（`src/client.ts` + `src/` 看板 UI）：入口注册、看板展示与交互。
-- 客户端经 `ctx.remote.kanban.<method>` 调用主机远程方法，看板打开期间约 2s 轮询 `getBoard()`。
+- 客户端经 `ctx.remote.kanban.<method>` 调用主机远程方法，看板打开期间约 4s 轮询 `getBoard()`，页面不可见时暂停轮询。
 
 ## 目录结构
 
@@ -71,17 +73,20 @@ DSH 是「主机平面 cordis 插件 + 客户端插件」双层架构，本插�
 │   └── client.raw.js         # vite 中间产物（被 wrap-client 包装）
 ├── scripts/
 │   ├── wrap-client.mjs       # 把 vite CJS 产物包装成 DSH ModuleLoader 格式
-│   └── smoke-host.mjs        # 主机端冒烟测试（内存态跑完整任务流转）
+│   ├── smoke-host.mjs        # 主机端冒烟测试（内存态跑完整任务流转）
+│   └── deploy-local.sh       # 本地部署脚本（build → 重装插件 → 重建 peer symlink → 重启 → RPC 自检）
 ├── src/                      # 客户端源码（Vue 3 + shadcn-vue）
 │   ├── client.ts             # React 外壳：挂载 Remote、注册侧边栏入口与 overlay
 │   ├── kanban-entry.ts       # Vue 应用挂载/卸载
 │   ├── remote.ts             # Typert Remote 描述符（远程方法声明）
 │   ├── App.vue               # 看板根组件
-│   ├── components/           # BoardView / KanbanColumn / TaskCard / TaskDetailSheet
-│   │                         #   / NewTaskDialog / SchedulePicker / ui/*(shadcn)
+│   ├── assets/index.css      # 全局样式（含 .markdown-body 排版）
+│   ├── components/           # 看板、任务详情、新建任务等 Vue 业务组件
+│   │   ├── agent-composer/   # Agent 输入框、附件预览与提交数据格式化
+│   │   └── ui/               # shadcn-vue 基础组件
 │   ├── composables/useBoard.ts
-│   └── lib/                  # bridge.ts（KanbanApi 接口）、types.ts、utils.ts
-├── docs/DESIGN.md            # 设计文档（状态机、git 流程、架构细节）
+│   └── lib/                  # Remote bridge、类型、Markdown 渲染、项目文件适配
+├── docs/                     # 设计文档 + 截图
 └── package.json
 ```
 
@@ -89,7 +94,7 @@ DSH 是「主机平面 cordis 插件 + 客户端插件」双层架构，本插�
 
 ### 环境要求
 
-- Node.js ≥ 22（pnpm 管理依赖）
+- Node.js ≥ 22.12（pnpm 管理依赖）
 - 已安装 DSH（`dsh` CLI 可用，含 `web` profile）
 - 项目基于 WSL（Ubuntu），以下命令在 WSL 内执行
 
@@ -142,35 +147,58 @@ pnpm test:smoke   # 内存态验证 创建→评论继续→审核→合并 全�
 ### 新建任务
 
 1. 点击看板「新建任务」。
-2. 选择**项目**（来自 DSH 工作区）；选择项目后自动加载该项目 git 分支，作为**基础分支**下拉选项（默认当前分支）。
+2. 选择**项目**（来自 DSH 工作区）；选择项目后自动加载该项目 git 分支，作为**基础分支**下拉选项（默认当前分支）。非 git 仓库的项目创建后直接进入「暂停中」。
 3. 填写标题与描述，可选选择**执行模型**与**执行时间**（留空立即执行，未来时间到点由主机端定时器自动领取）。
-   - 在「任务描述」中输入 `/` 可快速引用项目文件路径（同上，评论输入框同样支持）。
 4. 创建后任务进入「待领取」，agent 自动领取执行。
 
 ![新建任务](https://raw.githubusercontent.com/callmesoul/deepseek-kanban-plugin/main/docs/assets/new-task-dialog.png)
 
+### 任务描述与评论
+
+任务描述和待审查任务的评论框使用同一套 Agent Composer：
+
+- 输入 `@` 可搜索并引用当前项目中的文件或目录；使用 ↑/↓ 切换候选，Enter/Tab 确认，Esc 关闭。
+- 可通过附件按钮、拖放或剪贴板粘贴添加文件，并在提交前移除附件。
+- 附件不会上传文件内容，而是转换为 `file://` Markdown 引用；主机在构建 agent 提示词时将其还原为文件路径。浏览器无法获得完整路径时会退回文件名。
+- 任务描述中 Enter 用于换行；评论框中 Enter 提交，Shift+Enter 换行。中文输入法组合输入期间不会误提交。
+- 文本仍按 Markdown 保存并在任务详情中安全渲染，但输入区域不提供实时预览或 Markdown 语法提示。
+- 项目目录由当前项目或任务上下文自动提供，输入框内不重复显示。
+
 ### 状态流转
 
 ```
+                          ┌──────────────────────────────────────────────────────────┐
+                          │                                                          │
+                          ▼                                                          │
 待领取(todo) ──自动领取──▶ 执行中(running) ──agent完成+commit──▶ 待审查(review)
-                            │                                        │
-                            └──切分支遇未提交──▶ 暂停中(paused)        │ 用户手动「审核通过」
-                                                   │ 用户确认后继续    ▼
-                                                   └────────────── 已审核(approved)
-                                                                        │ agent 自动合回
-                                                                        ▼
-                                                                     已完成(done)
+     │                         │                                        │
+     │                         │ git/agent/commit 失败                   │ 评论并继续
+     │                         ▼                                        ▼
+     │                      暂停中(paused) ◀──── 合并失败 ◀──── 已审核(approved)
+     │                         │                          ▲                │
+     │      继续执行(resume)    │                          │                │ 审核通过
+     └─────────────────────────┘                          │                │ (触发合并)
+            ▲                                              │                ▼
+            └── 新建非 git / 无 commit ────────────────    │             已完成(done)
+                                                            │
+                                              审核通过 ──────┘
+                                              (非 review 状态拖拽到此也触发合并)
 ```
 
-- **待审查**：可打开详情查看改动记录（agent 最终输出全文）与评论；「审核通过」后自动合并；也可以评论让 agent 继续修改。
-- **暂停中**：切换分支时检测到未提交改动，提示用户处理；确认后继续执行。
-- **已完成**：任务分支已合并回基础分支并删除。
+- **待领取（todo）**：新建任务默认状态。agent 自动领取后进入执行中；若项目不是 git 仓库或无 commit，直接进入暂停中。
+- **执行中（running）**：agent 正在独立 worktree 中改码。完成后自动 `git add -A && git commit`，进入待审查。
+- **暂停中（paused）**：兜底状态。触发条件：项目不是 git 仓库、仓库无 commit、agent 创建/执行失败、提交失败、合并失败。用户「继续执行」后回到执行中。
+- **待审查（review）**：等待人工审核。可查看改动记录与评论；「审核通过」后进入已审核并触发自动合并；也可评论让 agent 继续修改（回到执行中）。
+- **已审核（approved）**：agent 正在将任务分支合并回基础分支。合并失败会回退暂停中。
+- **已完成（done）**：任务分支已合并回基础分支，worktree 已删除。
+- **手动流转**：看板列间拖拽可手动移动任务状态；拖到 `执行中` 会触发 agent 执行，拖到 `已审核` 会触发合并。
 
 ### git 流程
 
-- 新建任务：记录 `baseBranch`（基础分支）与 `taskBranch`（`kanban/<id前8>`）。
-- 执行：`git checkout <base>` → `git checkout -b <taskBranch>` → agent 改码 → `git add -A && git commit`。
-- 审核通过：`git checkout <base>` → `git merge --no-ff <taskBranch>` → `git branch -d <taskBranch>` → 状态置为 done。
+- **新建任务**：记录 `baseBranch`（基础分支）与 `taskBranch`（`kanban/<id前8>`）。
+- **执行**：`git worktree add -b <taskBranch> <path> <baseBranch>` 创建独立 worktree → agent 在 worktree 中改码 → `git add -A && git commit`。使用 worktree 而非 checkout，主工作区分支不受影响。
+- **审核通过**：若主工作区当前在基础分支上 → `git merge --no-ff --autostash <taskBranch>`；否则创建临时 worktree 合并后 `update-ref` 更新目标分支。合并后 `git worktree remove --force` 删除 worktree，`git branch -D <taskBranch>` 强制删除任务分支。
+- **评论继续**：复用已有 worktree，agent 在同一 worktree 中继续改码后重新提交。
 
 ## 远程 API（ctx.remote.kanban.*）
 
@@ -179,14 +207,14 @@ pnpm test:smoke   # 内存态验证 创建→评论继续→审核→合并 全�
 | `listProjects()` | 列出 DSH 工作区（项目）列表 |
 | `getBoard()` | 获取看板全量数据（项目 + 任务 + 状态） |
 | `listCreateTaskOptions()` | 新建任务选项（模型分组 + 默认模型） |
-| `listBranches({ projectId })` | 获取项目 git 分支列表（含当前分支） |
-| `listProjectPaths({ projectId })` | 获取项目文件/目录树（供 `/` 路径补全使用） |
-| `createTask(input)` | 新建任务 |
-| `moveTask({ taskId, to })` | 移动任务状态 |
-| `approveTask({ taskId })` | 审核通过（触发合并） |
-| `resumeTask({ taskId })` | 恢复暂停的任务 |
-| `commentTask({ taskId, comment })` | 评论并继续（恢复 agent 会话追加 followup） |
-| `deleteTask({ taskId })` | 删除任务 |
+| `listBranches({ input: { projectId } })` | 获取项目 git 分支列表（含当前分支） |
+| `listProjectPaths({ input: { projectId } })` | 获取项目文件/目录树（供 `@` 文件引用使用） |
+| `createTask({ input })` | 新建任务 |
+| `moveTask({ input: { taskId, to } })` | 移动任务状态（拖拽 / 手动流转） |
+| `approveTask({ input: { taskId } })` | 审核通过（触发合并） |
+| `resumeTask({ input: { taskId } })` | 恢复暂停的任务 |
+| `commentTask({ input: { taskId, comment } })` | 评论并继续（恢复 agent 会话追加 followup） |
+| `deleteTask({ input: { taskId } })` | 删除任务 |
 
 调用均返回 `{ ok: true, value } | { ok: false, error }`（见 `src/lib/types.ts`）。
 
@@ -195,7 +223,7 @@ pnpm test:smoke   # 内存态验证 创建→评论继续→审核→合并 全�
 ### 新增一个远程方法
 
 1. `lib/index.js`：在 `KanbanService` 添加方法，并加入 `markRemoteMethods` 注册列表。
-2. `src/remote.ts`：添加对应 descriptor。
+2. `src/remote.ts`：添加对应 descriptor（参数名须与主机方法参数名一致）。
 3. `src/lib/bridge.ts`：在 `KanbanApi` 接口补充签名。
 4. 重新 `pnpm build` 生成 client.js，重载 DSH 生效。
 
@@ -216,6 +244,10 @@ pnpm test:smoke   # 内存态验证 创建→评论继续→审核→合并 全�
 
 **Q：为什么改了源码不生效？**
 确保已执行 `pnpm build` 且已重载 DSH 应用。若仍未生效，可 `pnpm sync:dsh` 重装。
+
+## 变更记录
+
+详见 [CHANGELOG.md](./CHANGELOG.md)。
 
 ## License
 

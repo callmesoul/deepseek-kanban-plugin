@@ -273,6 +273,26 @@
   text-decoration: underline;
   text-underline-offset: 2px;
 }
+/* File attachment badge: pasted file:// links render as a pill */
+:where(.dsh-kanban-root) a[href^="file:"] {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  margin: 0 0.15em;
+  padding: 0.1em 0.55em;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  color: var(--foreground);
+  background: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 9999px;
+  text-decoration: none;
+  cursor: help;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+}
 :where(.dsh-kanban-root) .markdown-body table {
   width: 100%;
   margin: 0.5em 0;
