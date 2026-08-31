@@ -187,7 +187,7 @@ pnpm test:smoke   # 内存态验证 创建→评论继续→审核→合并 全�
 
 - **待领取（todo）**：新建任务默认状态。agent 自动领取后进入执行中；若项目不是 git 仓库或无 commit，直接进入暂停中。
 - **执行中（running）**：agent 正在独立 worktree 中改码。完成后自动 `git add -A && git commit`，进入待审查。
-- **暂停中（paused）**：兜底状态。触发条件：项目不是 git 仓库、仓库无 commit、agent 创建/执行失败、提交失败、合并失败。用户「继续执行」后回到执行中。
+- **暂停中（paused）**：兜底状态。触发条件：项目不是 git 仓库、仓库无 commit、agent 创建/执行失败、提交失败、合并失败。合并冲突会列出冲突文件并安全回滚主仓库；用户可点击「让 Agent 解决冲突」进入恢复流程。
 - **待审查（review）**：等待人工审核。可查看改动记录与评论；「审核通过」后进入已审核并触发自动合并；也可评论让 agent 继续修改（回到执行中）。
 - **已审核（approved）**：agent 正在将任务分支合并回基础分支。合并失败会回退暂停中。
 - **已完成（done）**：任务分支已合并回基础分支，worktree 已删除。
@@ -197,7 +197,8 @@ pnpm test:smoke   # 内存态验证 创建→评论继续→审核→合并 全�
 
 - **新建任务**：记录 `baseBranch`（基础分支）与 `taskBranch`（`kanban/<id前8>`）。
 - **执行**：`git worktree add -b <taskBranch> <path> <baseBranch>` 创建独立 worktree → agent 在 worktree 中改码 → `git add -A && git commit`。使用 worktree 而非 checkout，主工作区分支不受影响。
-- **审核通过**：若主工作区当前在基础分支上 → `git merge --no-ff --autostash <taskBranch>`；否则创建临时 worktree 合并后 `update-ref` 更新目标分支。合并后 `git worktree remove --force` 删除 worktree，`git branch -D <taskBranch>` 强制删除任务分支。
+- **审核通过**：若主工作区当前在基础分支上 → `git merge --no-ff --autostash <taskBranch>`；否则创建临时 worktree 合并后 `update-ref` 更新目标分支。合并失败会捕获冲突文件并执行 `git merge --abort`，不会把主仓库留在半合并状态。
+- **冲突恢复**：在任务 worktree 中把最新基础分支合入任务分支 → 原 Agent 解决冲突 → 系统检查残留冲突标记和未合并索引 → 提交冲突解决结果 → 回到待审查。再次审核通过后才合回基础分支并清理 worktree/任务分支。
 - **评论继续**：复用已有 worktree，agent 在同一 worktree 中继续改码后重新提交。
 
 ## 远程 API（ctx.remote.kanban.*）

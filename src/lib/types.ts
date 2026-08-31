@@ -54,6 +54,7 @@ export interface Task {
   updatedAt: string;
   comments: TaskComment[];
   changeLogs: TaskChangeLog[];
+  mergeConflictFiles: string[];
 }
 
 export interface ModelOption {

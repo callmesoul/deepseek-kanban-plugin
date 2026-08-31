@@ -46,7 +46,8 @@ DSH 是「主机平面 cordis 插件 + 客户端 React 插件」双层架构，�
 - 新建任务还可选择执行模型与执行时间：模型默认取 DSH 默认模型；执行时间留空立即执行，未来时间由主机端定时器到点后自动领取。
 - 执行：`git checkout <base>` → `git checkout -b <taskBranch>` → agent 改码 → `git add -A && git commit`。
 - 切分支前若有未提交改动（`git status --porcelain` 非空）→ 任务 `paused`，提示「分支有未提交的代码」。
-- 审核通过后：`git checkout <base>` → `git merge --no-ff <taskBranch>` → `git branch -d <taskBranch>` → `done`。
+- 审核通过后：在基础分支执行 `git merge --no-ff <taskBranch>`；失败时捕获冲突文件并 `git merge --abort`，任务进入 `paused`，主仓库保持干净。
+- 冲突恢复：在任务 worktree 合入最新基础分支 → Agent 解决冲突 → 系统校验并提交 → 返回 `review`；再次审核通过后合回基础分支并清理任务 worktree/分支。
 
 ## 客户端↔主机
 

@@ -47,6 +47,7 @@ const projectFilesCache = new Map<string, Promise<ProjectFile[]>>();
 const taskBranch = computed(() => task.value?.taskBranch || '—');
 const baseBranch = computed(() => task.value?.baseBranch || '—');
 const canResume = computed(() => task.value?.status === 'paused' || task.value?.status === 'todo');
+const hasMergeConflicts = computed(() => Boolean(task.value?.mergeConflictFiles.length));
 const canApprove = computed(() => task.value?.status === 'review' || task.value?.status === 'approved');
 const canComment = computed(() => task.value?.status === 'review');
 
@@ -263,7 +264,7 @@ const metaRows = computed(() => {
           >
             <Spinner v-if="busy" data-icon="inline-start" />
             <Play v-else data-icon="inline-start" />
-            继续执行
+            {{ hasMergeConflicts ? '让 Agent 解决冲突' : '继续执行' }}
           </Button>
           <Button
             v-if="canApprove"
