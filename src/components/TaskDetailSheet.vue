@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
+import { toast } from 'vue-sonner';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -22,7 +23,7 @@ import {
   type AgentComposerSubmitPayload,
   type ProjectFile,
 } from './agent-composer';
-import { Play, Check, Trash2, Send } from '@lucide/vue';
+import { Play, Check, Copy, Trash2, Send } from '@lucide/vue';
 import {
   STATUS_LABEL,
   type Task,
@@ -127,6 +128,15 @@ function submitComment(payload: AgentComposerSubmitPayload) {
   emit('comment', task.value.id, comment);
 }
 
+async function copyAgentSessionId(sessionId: string) {
+  try {
+    await navigator.clipboard.writeText(sessionId);
+    toast.success('Agent 会话 ID 已复制');
+  } catch {
+    toast.error('复制 Agent 会话 ID 失败');
+  }
+}
+
 watch(
   () => props.task?.id,
   () => {
@@ -154,7 +164,7 @@ const metaRows = computed(() => {
       ? [{ label: 'Worktree', value: task.value.worktreePath }]
       : []),
     ...(task.value.agentSessionId
-      ? [{ label: 'Agent 会话', value: task.value.agentSessionId }]
+      ? [{ label: 'Agent 会话', value: task.value.agentSessionId, copyable: true }]
       : []),
   ];
 });
@@ -225,7 +235,19 @@ const metaRows = computed(() => {
             <section class="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div v-for="row in metaRows" :key="row.label" class="min-w-0">
                 <div class="text-xs text-muted-foreground">{{ row.label }}</div>
-                <div class="mt-1 truncate text-sm" :title="row.value">{{ row.value }}</div>
+                <div class="mt-1 flex min-w-0 items-center gap-1">
+                  <div class="truncate text-sm" :title="row.value">{{ row.value }}</div>
+                  <Button
+                    v-if="row.copyable"
+                    variant="ghost"
+                    size="icon-xs"
+                    aria-label="复制 Agent 会话 ID"
+                    title="复制 Agent 会话 ID"
+                    @click="copyAgentSessionId(row.value)"
+                  >
+                    <Copy data-icon="inline-start" />
+                  </Button>
+                </div>
               </div>
             </section>
           </div>

@@ -15,6 +15,7 @@
 @custom-variant dark (&:is(.dsh-kanban-root.dark *));
 
 .dsh-kanban-root {
+  color-scheme: light;
   --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "PingFang SC", "Microsoft YaHei", sans-serif;
 
   --radius: 0.625rem;
@@ -53,6 +54,7 @@
 }
 
 .dsh-kanban-root.dark {
+  color-scheme: dark;
   --background: oklch(0.145 0 0);
   --foreground: oklch(0.985 0 0);
   --card: oklch(0.205 0 0);

@@ -200,7 +200,6 @@ function KanbanOverlay(props: { kanbanApi: KanbanApi }) {
     left: sidebarWidth,
     background: 'var(--dsw-alias-panel-fill, #fff)',
     color: 'var(--dsw-alias-label-primary, #111)',
-    borderLeft: '1px solid var(--dsw-alias-border-l2, rgba(0,0,0,0.12))',
     overflow: 'hidden',
     display: 'flex',
     flexDirection: 'column',
