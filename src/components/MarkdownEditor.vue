@@ -293,6 +293,72 @@ function onBlur() {
   }, 120);
 }
 
+// ── 粘贴附件（图片）──────────────────────────────────────────────────────────
+/** 从剪贴板 File 对象中尽力还原完整路径。 */
+async function resolveFilePath(file: File): Promise<string> {
+  // Electron/部分桌面宿主：File 对象直接携带系统绝对路径。
+  const abs = (file as File & { path?: string }).path;
+  if (typeof abs === 'string' && abs.trim()) return abs.trim();
+  // 拖拽文件夹场景：携带目录的相对路径。
+  if (file.webkitRelativePath) return file.webkitRelativePath;
+  // 标准浏览器剪贴板只有文件名：尝试在项目文件树中按文件名唯一匹配，得到相对完整路径。
+  const name = file.name;
+  if (!name) return '';
+  if (props.cacheKey && props.resolvePaths) {
+    const key = props.cacheKey();
+    if (key !== null && key !== undefined) {
+      try {
+        const entry = await loadEntry(key);
+        const matches = entry.paths.filter((p) => p.split('/').pop() === name);
+        if (matches.length === 1) return matches[0];
+      } catch {
+        // 匹配失败则回退为文件名。
+      }
+    }
+  }
+  return name;
+}
+
+/** 以 badge 形式插入：文本显示文件名，URL 记录完整路径。 */
+function insertFileBadge(path: string) {
+  const view = getView();
+  if (!view) return;
+  const name = path.split(/[\\/]/).pop() || path;
+  const label = name.replace(/[[\]]/g, '');
+  const title = path.replace(/"/g, '').replace(/\s+/g, ' ').trim();
+  const md = `[${label}](<file://${path}> "${title}")`;
+  const pos = view.state.selection.main.head;
+  view.dispatch({ changes: { from: pos, to: pos, insert: md } });
+  view.focus();
+}
+
+async function onPaste(e: ClipboardEvent) {
+  const data = e.clipboardData;
+  if (!data) return;
+
+  const files: File[] = [];
+  if (data.items) {
+    for (const item of Array.from(data.items)) {
+      if (item.kind === 'file') {
+        const f = item.getAsFile();
+        if (f) files.push(f);
+      }
+    }
+  }
+  if (!files.length && data.files?.length) {
+    files.push(...Array.from(data.files));
+  }
+  if (!files.length) return;
+
+  e.preventDefault();
+  e.stopPropagation();
+
+  for (const file of files) {
+    const path = await resolveFilePath(file);
+    if (path) insertFileBadge(path);
+  }
+}
+
 const toolbars = [
   'bold', 'italic', 'strike', '|',
   'title', 'quote', 'unorderedList', 'orderedList', 'task', '|',
@@ -302,7 +368,7 @@ const toolbars = [
 </script>
 
 <template>
-  <div ref="containerRef" class="relative" @keydown.capture="onKeydown" @blur="onBlur">
+  <div ref="containerRef" class="relative" @keydown.capture="onKeydown" @blur="onBlur" @paste.capture="onPaste">
     <MdEditor
       ref="mdRef"
       v-model="textModel"

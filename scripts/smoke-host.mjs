@@ -28,6 +28,8 @@ try {
   const table = new FakeTable();
   const domain = { table: () => table, close: async () => {} };
   const workspace = { id: 'ws-1', title: 'smoke', path: root };
+  let failNextAgentTurn = false;
+  let turn = 0;
   const ctx = {
     reflect: { provide() {}, unregister() {} },
     effect() {},
@@ -52,14 +54,25 @@ try {
       listModels: async () => [],
     },
     agents: {
-      create: async ({ sessionId }) => ({
-        agent: {
-          session: { id: sessionId },
-          followup() {},
-          whenIdle: async () => {},
-        },
-        dispose: async () => {},
-      }),
+      create: async ({ sessionId }) => {
+        const session = { id: sessionId, seq: 0, events: [] };
+        return {
+          agent: {
+            session,
+            followup() {
+              turn += 1;
+              session.events.push({ type: 'turn/start', seq: session.seq++, data: { turn } });
+              const reason = failNextAgentTurn
+                ? { kind: 'error', error: { code: 'AUTH', message: 'not signed in' } }
+                : { kind: 'completed' };
+              failNextAgentTurn = false;
+              session.events.push({ type: 'turn/end', seq: session.seq++, data: { turn, reason } });
+            },
+            whenIdle: async () => {},
+          },
+          dispose: async () => {},
+        };
+      },
     },
   };
 
@@ -89,6 +102,17 @@ try {
   if (board.projects[0]?.branch !== 'master') throw new Error(`unexpected branch after merge: ${board.projects[0]?.branch}`);
   if ((board.tasks[0]?.changeLogs ?? []).length !== 2) {
     throw new Error(`expected two change logs, got: ${JSON.stringify(board.tasks[0]?.changeLogs ?? [])}`);
+  }
+
+  failNextAgentTurn = true;
+  const failedTask = await service.createTask({ projectId: workspace.id, title: 'failed agent task' });
+  await waitFor(
+    async () => (await service.getBoard()).tasks.find((item) => item.id === failedTask.id)?.status === 'paused',
+    'failed agent task to pause',
+  );
+  const failed = (await service.getBoard()).tasks.find((item) => item.id === failedTask.id);
+  if (failed?.message !== 'agent 执行失败：not signed in') {
+    throw new Error(`unexpected failed agent message: ${JSON.stringify(failed)}`);
   }
   console.log('smoke-host: ok');
 } finally {

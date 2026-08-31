@@ -23,7 +23,11 @@ import {
   type ProjectFile,
 } from './agent-composer';
 import { Play, Check, Trash2, Send } from '@lucide/vue';
-import { STATUS_LABEL, type Task } from '@/lib/types';
+import {
+  STATUS_LABEL,
+  type Task,
+  type TaskChangeLog,
+} from '@/lib/types';
 import { unwrap, useKanbanApi } from '@/lib/bridge';
 
 const props = defineProps<{ task: Task | null; busy: boolean }>();
@@ -45,8 +49,53 @@ const baseBranch = computed(() => task.value?.baseBranch || '—');
 const canResume = computed(() => task.value?.status === 'paused' || task.value?.status === 'todo');
 const canApprove = computed(() => task.value?.status === 'review' || task.value?.status === 'approved');
 const canComment = computed(() => task.value?.status === 'review');
-const comments = computed(() => task.value?.comments ?? []);
-const changeLogs = computed(() => [...(task.value?.changeLogs ?? [])].reverse());
+
+type TaskRecord =
+  | {
+      id: string;
+      kind: 'description' | 'comment';
+      content: string;
+      createdAt: string;
+    }
+  | {
+      id: string;
+      kind: 'result';
+      content: string;
+      createdAt: string;
+      source: TaskChangeLog['source'];
+      commit: string | null;
+    };
+
+const taskRecords = computed<TaskRecord[]>(() => {
+  if (!task.value) return [];
+
+  const history: TaskRecord[] = [
+    ...task.value.changeLogs.map((log) => ({
+      id: `result-${log.id}`,
+      kind: 'result' as const,
+      content: log.summary,
+      createdAt: log.createdAt,
+      source: log.source,
+      commit: log.commit,
+    })),
+    ...task.value.comments.map((comment) => ({
+      id: `comment-${comment.id}`,
+      kind: 'comment' as const,
+      content: comment.content,
+      createdAt: comment.createdAt,
+    })),
+  ].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+
+  return [
+    {
+      id: `description-${task.value.id}`,
+      kind: 'description',
+      content: task.value.description,
+      createdAt: task.value.createdAt,
+    },
+    ...history,
+  ];
+});
 
 function changeSourceLabel(source: 'agent' | 'git' | 'system') {
   if (source === 'agent') return 'Agent 说明';
@@ -133,58 +182,42 @@ const metaRows = computed(() => {
         <ScrollArea class="min-h-0 flex-1">
           <div class="flex flex-col gap-5 px-5 py-4">
             <section class="flex flex-col gap-2">
-              <div class="text-xs font-medium text-muted-foreground">任务描述</div>
-              <MarkdownPreview :content="task.description" placeholder="（无描述）" />
-            </section>
-
-            <Separator />
-
-            <section v-if="task.message" class="flex flex-col gap-2">
-              <div class="text-xs font-medium text-muted-foreground">状态说明</div>
-              <div class="rounded-lg border bg-muted/40 p-3">
-                <MarkdownPreview :content="task.message" />
-              </div>
-            </section>
-
-            <Separator v-if="task.message" />
-
-            <section class="flex flex-col gap-2">
-              <div class="text-xs font-medium text-muted-foreground">改动记录</div>
-              <div v-if="changeLogs.length" class="flex flex-col gap-2">
+              <div class="text-xs font-medium text-muted-foreground">任务记录</div>
+              <div class="flex flex-col gap-2">
                 <div
-                  v-for="log in changeLogs"
-                  :key="log.id"
-                  class="rounded-lg border bg-muted/40 p-3 text-sm leading-6"
-                >
-                  <div class="mb-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                    <span>{{ new Date(log.createdAt).toLocaleString() }}</span>
-                    <Badge variant="secondary">{{ changeSourceLabel(log.source) }}</Badge>
-                    <span v-if="log.commit" class="font-mono">{{ log.commit }}</span>
-                  </div>
-                  <div class="whitespace-pre-wrap">{{ log.summary }}</div>
-                </div>
-              </div>
-              <div v-else class="text-sm text-muted-foreground">暂无改动记录</div>
-            </section>
-
-            <Separator />
-
-            <section class="flex flex-col gap-2">
-              <div class="text-xs font-medium text-muted-foreground">评论记录</div>
-              <div v-if="comments.length" class="flex flex-col gap-2">
-                <div
-                  v-for="comment in comments"
-                  :key="comment.id"
+                  v-for="record in taskRecords"
+                  :key="record.id"
                   class="rounded-lg border bg-muted/40 p-3"
                 >
-                  <div class="mb-1 text-xs text-muted-foreground">
-                    {{ new Date(comment.createdAt).toLocaleString() }}
+                  <div class="mb-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                    <Badge :variant="record.kind === 'result' ? 'default' : 'secondary'">
+                      {{ record.kind === 'description' ? '任务描述' : record.kind === 'result' ? '结果' : '评论' }}
+                    </Badge>
+                    <span>{{ new Date(record.createdAt).toLocaleString() }}</span>
+                    <Badge v-if="record.kind === 'result'" variant="secondary">
+                      {{ changeSourceLabel(record.source) }}
+                    </Badge>
+                    <span v-if="record.kind === 'result' && record.commit" class="font-mono">
+                      {{ record.commit }}
+                    </span>
                   </div>
-                  <MarkdownPreview :content="comment.content" />
+                  <MarkdownPreview
+                    :content="record.content"
+                    :placeholder="record.kind === 'description' ? '（无描述）' : '（无内容）'"
+                  />
                 </div>
               </div>
-              <div v-else class="text-sm text-muted-foreground">暂无评论记录</div>
             </section>
+
+            <template v-if="task.message">
+              <Separator />
+              <section class="flex flex-col gap-2">
+                <div class="text-xs font-medium text-muted-foreground">当前状态</div>
+                <div class="rounded-lg border bg-muted/40 p-3">
+                  <MarkdownPreview :content="task.message" />
+                </div>
+              </section>
+            </template>
 
             <Separator />
 
