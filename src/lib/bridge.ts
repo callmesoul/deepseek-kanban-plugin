@@ -1,7 +1,19 @@
 import { inject } from 'vue';
-import type { Board, CreateTaskOptions, Project, RemoteResult, Task, TaskStatus } from './types';
+import type {
+  Board,
+  CreateTaskOptions,
+  PluginUpdateInfo,
+  PluginUpdateState,
+  Project,
+  RemoteResult,
+  Task,
+  TaskStatus,
+} from './types';
 
 export interface KanbanApi {
+  getPluginUpdateInfo(): Promise<RemoteResult<PluginUpdateInfo>>;
+  startPluginUpdate(input: { tag: string }): Promise<RemoteResult<PluginUpdateState>>;
+  acknowledgePluginUpdate(input: { targetVersion: string }): Promise<RemoteResult<{ cleared: boolean }>>;
   listProjects(): Promise<RemoteResult<Project[]>>;
   getBoard(): Promise<RemoteResult<Board>>;
   listCreateTaskOptions(): Promise<RemoteResult<CreateTaskOptions>>;

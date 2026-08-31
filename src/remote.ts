@@ -33,6 +33,9 @@ function descriptor(method: string, params: any[] = []) {
 export const KANBAN_REMOTE = {
   package: '@deepseek-kanban/plugin',
   descriptors: [
+    descriptor('getPluginUpdateInfo'),
+    descriptor('startPluginUpdate', [inputParam('input')]),
+    descriptor('acknowledgePluginUpdate', [inputParam('input')]),
     descriptor('listProjects'),
     descriptor('getBoard'),
     descriptor('listCreateTaskOptions'),

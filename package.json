@@ -1,6 +1,6 @@
 {
   "name": "@deepseek-kanban/plugin",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "DeepSeek Harness 任务看板插件（主机状态机 + git 调度 + 浏览器看板 UI）",
   "type": "module",
   "main": "lib/index.js",
@@ -12,6 +12,8 @@
   "files": [
     "lib/index.js",
     "lib/client.js",
+    "lib/update.js",
+    "lib/updater.js",
     "cordis.patch.yml",
     "CHANGELOG.md",
     "docs/assets"
@@ -19,7 +21,9 @@
   "scripts": {
     "build": "vite build && node scripts/wrap-client.mjs",
     "watch": "vite build --watch",
+    "test": "pnpm test:smoke && pnpm test:update",
     "test:smoke": "node scripts/smoke-host.mjs",
+    "test:update": "node scripts/test-update.mjs",
     "sync:dsh": "pnpm build && pnpm --dir \"$HOME/.dsh/profiles/web\" remove @deepseek-kanban/plugin && pnpm --dir \"$HOME/.dsh/profiles/web\" add \"file:$(pwd)\""
   },
   "dsh": {

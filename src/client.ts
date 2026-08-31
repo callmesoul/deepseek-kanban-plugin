@@ -10,6 +10,7 @@ import * as React from 'react';
 import { createElement, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { KANBAN_REMOTE } from './remote';
 import { mountKanban } from './kanban-entry';
+import { mountUpdateNotifier } from './update-entry';
 import type { KanbanApi } from './lib/bridge';
 import kanbanCss from './assets/index.css?inline';
 import sonnerCss from 'vue-sonner/style.css?inline';
@@ -212,6 +213,23 @@ function KanbanOverlay(props: { kanbanApi: KanbanApi }) {
   );
 }
 
+function UpdateNotifierSlot(props: { kanbanApi: KanbanApi }) {
+  const hostRef = useRef<HTMLDivElement | null>(null);
+  const apiRef = useRef(props.kanbanApi);
+  apiRef.current = props.kanbanApi;
+
+  useEffect(() => {
+    const el = hostRef.current;
+    if (!el) return;
+    return mountUpdateNotifier(el, apiRef.current);
+  }, []);
+
+  return createElement('div', {
+    ref: hostRef,
+    style: { position: 'absolute', width: 0, height: 0, pointerEvents: 'none' },
+  });
+}
+
 // ── plugin entry ────────────────────────────────────────────────────────────
 export const inject = ['slots', 'remote'];
 
@@ -245,6 +263,18 @@ export async function apply(ctx: any) {
         inject: () => ({ kanbanApi }),
       },
       KanbanOverlay as any,
+    ),
+  );
+
+  ctx.slots.inject('shell.overlay', () =>
+    ctx.slots.register(
+      {
+        name: 'shell.overlay',
+        id: 'kanban-update',
+        order: 60,
+        inject: () => ({ kanbanApi }),
+      },
+      UpdateNotifierSlot as any,
     ),
   );
 }

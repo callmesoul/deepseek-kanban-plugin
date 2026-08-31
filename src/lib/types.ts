@@ -84,6 +84,39 @@ export interface Board {
   version: string;
 }
 
+export type PluginUpdateStatus = 'installing' | 'restarting' | 'succeeded' | 'failed';
+
+export interface PluginRelease {
+  version: string;
+  tagName: string;
+  name: string;
+  notes: string;
+  publishedAt: string | null;
+  url: string;
+}
+
+export interface PluginUpdateState {
+  status: PluginUpdateStatus;
+  targetVersion: string;
+  tagName: string;
+  message?: string;
+  installedVersion?: string;
+  requiresRestart?: boolean;
+  startedAt?: string;
+  finishedAt?: string;
+}
+
+export interface PluginUpdateInfo {
+  currentVersion: string;
+  enabled: boolean;
+  disabledReason: 'not-installed' | 'development-install' | 'unsupported-source' | null;
+  installedSpec: string | null;
+  checkedAt: string | null;
+  checkError: string | null;
+  update: PluginRelease | null;
+  state: PluginUpdateState | null;
+}
+
 export type RemoteResult<T> =
   | { ok: true; value: T }
   | { ok: false; error: { code: string; message: string; details?: object } };

@@ -35,6 +35,7 @@ dsh plugin --profile web add "github:callmesoul/deepseek-kanban-plugin#main"
 - **改动记录**：任务详情记录每次 agent 执行后的改动说明（优先取 agent 最终输出全文，回退 git 变更摘要或系统消息），标注来源（agent / git / system）与 commit hash。
 - **定时执行恢复**：设了定时执行的任务，DSH 重启后自动恢复定时器，到点自动领取。
 - **统一工作区**：同一项目的所有看板任务共享同一个「看板任务」工作区分组，不重复创建。
+- **一键更新**：GitHub Release 发布新稳定版本时，在 DSH 全局界面提示更新；点击即可安装，systemd 环境会自动重启服务并刷新页面。
 
 ## 架构概览
 
@@ -55,7 +56,8 @@ DSH 是「主机平面 cordis 插件 + 客户端插件」双层架构，本插�
 │    ├─ 数据：ctx.storageDomain 的 kanban 域（tasks 表）→ ~/.dsh/storages        │
 │    ├─ 项目：ctx.workspaceRegistry.list()（与 DSH 工作区绑定）                   │
 │    ├─ git：child_process 执行（主机平面，不受沙箱限制）                          │
-│    └─ agent：ctx.agents.create + followup + whenIdle                           │
+│    ├─ agent：ctx.agents.create + followup + whenIdle                           │
+│    └─ 更新：GitHub Release 检查 → 独立 updater 安装 → 重启 dsh-web              │
 └────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -70,6 +72,8 @@ DSH 是「主机平面 cordis 插件 + 客户端插件」双层架构，本插�
 ├── lib/                      # 构建产物（也是插件包体）
 │   ├── index.js              # 主机端服务（KanbanService，手写源文件）
 │   ├── client.js             # 客户端 bundle（构建生成，ModuleLoader 包装）
+│   ├── update.js             # 版本比较、安装来源识别和更新状态持久化
+│   ├── updater.js            # 独立更新进程（安装、校验版本、重启服务）
 │   └── client.raw.js         # vite 中间产物（被 wrap-client 包装）
 ├── scripts/
 │   ├── wrap-client.mjs       # 把 vite CJS 产物包装成 DSH ModuleLoader 格式
@@ -134,15 +138,27 @@ pnpm sync:dsh     # 等价于 build + remove + add
 
 安装后**重启 / 重载 DSH 应用**（或重载插件）生效。之后侧边栏底部出现「任务看板」入口。
 
-### 冒烟测试
+### 测试
 
 ```bash
+pnpm test         # 主机任务流 + 插件更新测试
 pnpm test:smoke   # 内存态验证 创建→评论继续→审核→合并 全流程
+pnpm test:update  # 验证版本、来源、状态和安装命令安全约束
 ```
 
 ## 使用说明
 
 ![看板面板](https://raw.githubusercontent.com/callmesoul/deepseek-kanban-plugin/main/docs/assets/kanban-board.png)
+
+### 插件更新
+
+插件启动后会检查仓库的 GitHub Latest Release。发现高于当前版本的稳定 Release 时，DSH 右上角会显示更新提示，可查看发布详情或点击「立即更新」。
+
+- 通过 `github:callmesoul/deepseek-kanban-plugin` 安装的插件支持一键更新。
+- 更新器只安装提示中经过主机端校验的最新稳定 Tag，不执行浏览器传入的任意命令。
+- 使用 `file:`、`link:` 的本地开发安装不会检查或覆盖源码。
+- `dsh-web.service` 正在运行时，安装完成后自动重启服务；其他启动方式会提示手动重启 DSH。
+- 更新状态保存在 `~/.dsh/updates/deepseek-kanban.json`，安装或重启失败时会在提示中显示错误。
 
 ### 新建任务
 
@@ -205,6 +221,9 @@ pnpm test:smoke   # 内存态验证 创建→评论继续→审核→合并 全�
 
 | 方法 | 说明 |
 | --- | --- |
+| `getPluginUpdateInfo()` | 获取当前版本、安装来源、最新 Release 与更新状态 |
+| `startPluginUpdate({ input: { tag } })` | 安装经过校验的最新稳定 Release |
+| `acknowledgePluginUpdate({ input: { targetVersion } })` | 确认并清理已完成/失败的更新状态 |
 | `listProjects()` | 列出 DSH 工作区（项目）列表 |
 | `getBoard()` | 获取看板全量数据（项目 + 任务 + 状态） |
 | `listCreateTaskOptions()` | 新建任务选项（模型分组 + 默认模型） |
@@ -234,6 +253,7 @@ pnpm test:smoke   # 内存态验证 创建→评论继续→审核→合并 全�
 - 通过 pnpm `file:` 协议安装后，profile 副本与项目源文件是**硬链接**：`pnpm build` 后源文件即生效，无需手动拷贝；但改 `package.json` 的 `files` 字段或需要彻底重装时，用 `pnpm sync:dsh`。
 - **发布/安装注意**：`package.json` 的 `files` 字段必须包含 `cordis.patch.yml`（`dsh.bundle.patch` 依赖它），否则 GitHub 安装后 DSH 启动会因找不到 overlay 报错；profile 的 `cordis.patch.yml` 中不要再重复 insert `kanban`，否则报 `duplicate loader entry id`。
 - 改 host 端或客户端代码后，都需要**重载 DSH 应用/插件**才生效。
+- 自动更新以 GitHub Release 为唯一稳定通道；发布时需要同步更新版本号、`CHANGELOG.md`、Git Tag 和 GitHub Release。
 
 ## 常见问题
 
