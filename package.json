@@ -1,6 +1,6 @@
 {
   "name": "@deepseek-kanban/plugin",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "DeepSeek Harness 任务看板插件（主机状态机 + git 调度 + 浏览器看板 UI）",
   "type": "module",
   "main": "lib/index.js",

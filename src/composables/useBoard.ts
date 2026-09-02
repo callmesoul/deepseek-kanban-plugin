@@ -1,6 +1,6 @@
 import { computed, reactive, ref } from 'vue';
 import { unwrap, useKanbanApi } from '@/lib/bridge';
-import { STATUSES, type Board, type Project, type Task, type TaskStatus } from '@/lib/types';
+import { STATUSES, type AttachmentRef, type Board, type Project, type Task, type TaskStatus } from '@/lib/types';
 
 export function useBoard() {
   const api = useKanbanApi();
@@ -50,6 +50,7 @@ export function useBoard() {
   async function createTask(input: {
     title: string;
     description?: string;
+    attachments?: AttachmentRef[];
     baseBranch?: string;
     modelProvider?: string;
     model?: string;
@@ -96,10 +97,14 @@ export function useBoard() {
     }
   }
 
-  async function commentTask(taskId: string, comment: string) {
+  async function commentTask(
+    taskId: string,
+    comment: string,
+    attachments: AttachmentRef[] = [],
+  ) {
     busy[taskId] = true;
     try {
-      const updated = await unwrap(api.commentTask({ taskId, comment }));
+      const updated = await unwrap(api.commentTask({ taskId, comment, attachments }));
       tasks.value = tasks.value.map((t) => (t.id === updated.id ? updated : t));
       return updated;
     } finally {

@@ -22,6 +22,19 @@ export interface AgentComposerSubmitPayload {
   mentionedFiles: ProjectFile[]
 }
 
+export type ImageMediaType = 'image/png' | 'image/jpeg' | 'image/webp' | 'image/gif'
+
+export interface UploadedAttachment {
+  attachmentId: string
+  kind: 'image' | 'file'
+  name: string
+  mediaType: string
+  bytes: number
+  width?: number
+  height?: number
+  imageAttachmentId?: string
+}
+
 export type AgentContentPart =
   | {
       type: 'project_directory'

@@ -38,6 +38,8 @@ export const KANBAN_REMOTE = {
     descriptor('acknowledgePluginUpdate', [inputParam('input')]),
     descriptor('listProjects'),
     descriptor('getBoard'),
+    descriptor('getTaskImage', [inputParam('input')]),
+    descriptor('listTaskSessions'),
     descriptor('listCreateTaskOptions'),
     descriptor('listBranches', [inputParam('input')]),
     descriptor('listProjectPaths', [inputParam('input')]),

@@ -83,6 +83,180 @@ function BoardIcon() {
 
 const IS_MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || '');
 const HOTKEY_LABEL = IS_MAC ? '⌘K' : 'Ctrl+K';
+const VIRTUAL_KANBAN_WORKSPACE_ID = 'kanban:virtual-workspace';
+const VIRTUAL_KANBAN_WORKSPACE_TITLE = '看板任务';
+const TASK_SESSION_POLL_INTERVAL = 4_000;
+
+type ObservableSnapshot<T> = {
+  getSnapshot(): T;
+  subscribe(listener: () => void): () => void;
+};
+
+function isLegacyKanbanWorkspace(workspace: any): boolean {
+  return typeof workspace?.title === 'string'
+    && workspace.title.endsWith('看板任务')
+    && String(workspace.path || '').split(/[\\/]/).some(
+      (segment) => segment.endsWith('.kanban-worktrees'),
+    );
+}
+
+function createVirtualWorkspaceSource(
+  base: ObservableSnapshot<any>,
+  kanbanApi: KanbanApi,
+) {
+  const listeners = new Set<() => void>();
+  let sessionIds: string[] = [];
+  let snapshot: any;
+  let stopped = false;
+  let pollTimer: number | null = null;
+
+  const compose = () => {
+    const current = base.getSnapshot();
+    const realWorkspaces = (current.items || []).filter(
+      (workspace: any) => !isLegacyKanbanWorkspace(workspace),
+    );
+    const virtualWorkspace = {
+      workspaceId: VIRTUAL_KANBAN_WORKSPACE_ID,
+      title: VIRTUAL_KANBAN_WORKSPACE_TITLE,
+      path: '',
+      sessionIds,
+      createdAt: '1970-01-01T00:00:00.000Z',
+      updatedAt: '1970-01-01T00:00:00.000Z',
+    };
+    snapshot = { ...current, items: [virtualWorkspace, ...realWorkspaces] };
+  };
+
+  const notify = () => {
+    compose();
+    listeners.forEach((listener) => listener());
+  };
+
+  const refreshTaskSessions = async () => {
+    try {
+      const result = await kanbanApi.listTaskSessions();
+      if (result.ok) {
+        const next = [...new Set(result.value.sessionIds.filter(Boolean))];
+        if (next.length !== sessionIds.length || next.some((id, index) => id !== sessionIds[index])) {
+          sessionIds = next;
+          notify();
+        }
+      }
+    } catch (error) {
+      console.warn('kanban virtual workspace refresh failed:', error);
+    } finally {
+      if (!stopped) {
+        pollTimer = window.setTimeout(refreshTaskSessions, TASK_SESSION_POLL_INTERVAL);
+      }
+    }
+  };
+
+  compose();
+  const unsubscribeBase = base.subscribe(notify);
+  void refreshTaskSessions();
+
+  const source: ObservableSnapshot<any> = {
+    getSnapshot: () => snapshot,
+    subscribe(listener) {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+  };
+
+  const useWorkspaces = <T,>(selector: (state: any) => T): T => {
+    const state = useSyncExternalStore(source.subscribe, source.getSnapshot, source.getSnapshot);
+    return selector(state);
+  };
+
+  return {
+    useWorkspaces,
+    dispose() {
+      stopped = true;
+      unsubscribeBase();
+      if (pollTimer !== null) window.clearTimeout(pollTimer);
+      listeners.clear();
+    },
+  };
+}
+
+function installVirtualKanbanWorkspace(ctx: any, kanbanApi: KanbanApi): () => void {
+  const workspaces = ctx.get('workspaces');
+  const projection = createVirtualWorkspaceSource(workspaces.list, kanbanApi);
+  let stopped = false;
+  let patched: {
+    entry: any;
+    originalInject: any;
+    wrappedInject: (...args: any[]) => any;
+  } | null = null;
+
+  const reconcile = () => {
+    if (stopped) return;
+    const entries = ctx.slots.entries('sidebar.workspaces');
+    if (patched && entries.includes(patched.entry)) return;
+    patched = null;
+
+    const original = entries.find(
+      (entry: any) => entry.component
+        && entry.children?.['sidebar.workspaces.directoryFlow'],
+    );
+    if (!original) return;
+
+    const originalInject = original.inject;
+    const wrappedInject = (...args: any[]) => {
+      const injected = typeof originalInject === 'function' ? originalInject(...args) : {};
+      return {
+        ...injected,
+        useWorkspaces: projection.useWorkspaces,
+        startSession: (workspaceId?: string) => {
+          if (workspaceId === VIRTUAL_KANBAN_WORKSPACE_ID) {
+            setOverlayOpen(true);
+            return;
+          }
+          injected.startSession?.(workspaceId);
+        },
+        renameWorkspace: (workspaceId: string, title: string) => (
+          workspaceId === VIRTUAL_KANBAN_WORKSPACE_ID
+            ? Promise.resolve()
+            : injected.renameWorkspace?.(workspaceId, title)
+        ),
+        deleteWorkspace: (workspaceId: string) => (
+          workspaceId === VIRTUAL_KANBAN_WORKSPACE_ID
+            ? Promise.resolve()
+            : injected.deleteWorkspace?.(workspaceId)
+        ),
+        insertWorkspaceBefore: (workspaceId: string, beforeWorkspaceId?: string) => (
+          workspaceId === VIRTUAL_KANBAN_WORKSPACE_ID
+            || beforeWorkspaceId === VIRTUAL_KANBAN_WORKSPACE_ID
+            ? Promise.resolve()
+            : injected.insertWorkspaceBefore?.(workspaceId, beforeWorkspaceId)
+        ),
+        insertSessionBefore: (
+          workspaceId: string,
+          sessionId: string,
+          beforeSessionId?: string,
+        ) => (
+          workspaceId === VIRTUAL_KANBAN_WORKSPACE_ID
+            ? Promise.resolve()
+            : injected.insertSessionBefore?.(workspaceId, sessionId, beforeSessionId)
+        ),
+      };
+    };
+
+    original.inject = wrappedInject;
+    patched = { entry: original, originalInject, wrappedInject };
+  };
+
+  const unsubscribe = ctx.slots.subscribe('sidebar.workspaces', () => queueMicrotask(reconcile));
+  reconcile();
+
+  return () => {
+    stopped = true;
+    unsubscribe();
+    if (patched?.entry.inject === patched.wrappedInject) {
+      patched.entry.inject = patched.originalInject;
+    }
+    projection.dispose();
+  };
+}
 
 function SidebarKanbanMenu(props: { wide: boolean; onOpen: () => void }) {
   const wide = props.wide;
@@ -231,7 +405,7 @@ function UpdateNotifierSlot(props: { kanbanApi: KanbanApi }) {
 }
 
 // ── plugin entry ────────────────────────────────────────────────────────────
-export const inject = ['slots', 'remote'];
+export const inject = ['slots', 'remote', 'workspaces'];
 
 export async function apply(ctx: any) {
   injectStyles();
@@ -241,6 +415,11 @@ export async function apply(ctx: any) {
   const kanbanApi = ctx.get('remote.kanban');
   // 暴露到 window：作为 useKanbanApi() 的兜底来源，也便于在控制台诊断远程调用。
   (window as any).__kanbanApi = kanbanApi;
+
+  ctx.effect(
+    () => installVirtualKanbanWorkspace(ctx, kanbanApi),
+    'kanban.virtualWorkspace',
+  );
 
   ctx.slots.inject('sidebar.footer.action', () =>
     ctx.slots.register(

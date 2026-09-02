@@ -22,10 +22,32 @@ export interface Project {
   git: boolean;
 }
 
+export interface AttachmentRef {
+  attachmentId: string;
+  kind: 'image' | 'file';
+  mediaType: string;
+  bytes: number;
+  width?: number;
+  height?: number;
+  name?: string;
+  imageAttachmentId?: string;
+}
+
+export type ImageAttachmentRef = AttachmentRef;
+
+export interface TaskImageData {
+  attachmentId: string;
+  mediaType: ImageAttachmentRef['mediaType'];
+  name?: string;
+  dataBase64: string;
+}
+
 export interface TaskComment {
   id: string;
   content: string;
   createdAt: string;
+  attachments: AttachmentRef[];
+  images: ImageAttachmentRef[];
 }
 
 export interface TaskChangeLog {
@@ -41,12 +63,15 @@ export interface Task {
   projectId: string;
   title: string;
   description: string;
+  attachments: AttachmentRef[];
+  images: ImageAttachmentRef[];
   baseBranch: string;
   taskBranch: string;
   worktreePath: string;
   status: TaskStatus;
   message: string;
   agentSessionId: string | null;
+  agentSessionIds: string[];
   modelProvider: string | null;
   model: string | null;
   executeAt: string | null;

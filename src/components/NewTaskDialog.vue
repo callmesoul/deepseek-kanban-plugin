@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue';
+import { toast } from 'vue-sonner';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -28,7 +29,9 @@ import type { CreateTaskOptions, Project } from '@/lib/types';
 import {
   AgentComposer,
   formatComposerText,
+  uploadComposerAttachments,
   type AgentComposerSubmitPayload,
+  type UploadedAttachment,
   type ProjectFile,
 } from './agent-composer';
 import SchedulePicker from './SchedulePicker.vue';
@@ -43,6 +46,7 @@ const emit = defineEmits<{
     projectId: string;
     title: string;
     description: string;
+    attachments: UploadedAttachment[];
     baseBranch: string;
     modelProvider?: string;
     model?: string;
@@ -55,6 +59,7 @@ const api = useKanbanApi();
 const open = ref(false);
 const createOptions = ref<CreateTaskOptions | null>(null);
 const optionsLoading = ref(false);
+const preparing = ref(false);
 const branches = ref<string[]>([]);
 const branchesLoading = ref(false);
 const projectFilesCache = new Map<string, Promise<ProjectFile[]>>();
@@ -175,24 +180,32 @@ function resolveProjectFiles() {
   return pending;
 }
 
-function submit() {
-  if (!form.projectId || !form.title.trim()) return;
-  const description = descriptionComposerRef.value
-    ? formatComposerText(descriptionComposerRef.value.getPayload())
-    : form.description.trim();
-  emit('create', {
-    projectId: form.projectId,
-    title: form.title.trim(),
-    description,
-    baseBranch: form.baseBranch.trim(),
-    modelProvider: form.modelProvider || undefined,
-    model: form.model || undefined,
-    executeAt: form.executeAt,
-  });
-  form.title = '';
-  form.description = '';
-  form.executeAt = null;
-  open.value = false;
+async function submit() {
+  if (!form.projectId || !form.title.trim() || preparing.value) return;
+  preparing.value = true;
+  try {
+    const payload = descriptionComposerRef.value?.getPayload();
+    const description = payload ? formatComposerText(payload) : form.description.trim();
+    const attachments = payload ? await uploadComposerAttachments(payload) : [];
+    emit('create', {
+      projectId: form.projectId,
+      title: form.title.trim(),
+      description,
+      attachments,
+      baseBranch: form.baseBranch.trim(),
+      modelProvider: form.modelProvider || undefined,
+      model: form.model || undefined,
+      executeAt: form.executeAt,
+    });
+    form.title = '';
+    form.description = '';
+    form.executeAt = null;
+    open.value = false;
+  } catch (error) {
+    toast.error(error instanceof Error ? error.message : '附件上传失败');
+  } finally {
+    preparing.value = false;
+  }
 }
 </script>
 
@@ -335,8 +348,8 @@ function submit() {
 
       <DialogFooter>
         <Button variant="outline" @click="open = false">取消</Button>
-        <Button :disabled="submitting || !form.projectId || !form.title.trim()" @click="submit">
-          <Spinner v-if="submitting" data-icon="inline-start" />
+        <Button :disabled="submitting || preparing || !form.projectId || !form.title.trim()" @click="submit">
+          <Spinner v-if="submitting || preparing" data-icon="inline-start" />
           创建
         </Button>
       </DialogFooter>

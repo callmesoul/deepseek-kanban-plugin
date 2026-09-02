@@ -3,6 +3,14 @@ import { computed, ref, watch } from 'vue';
 import { toast } from 'vue-sonner';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import {
@@ -17,15 +25,19 @@ import { Spinner } from '@/components/ui/spinner';
 import { projectFilesFromPaths } from '@/lib/project-files';
 import KanbanStatusBadge from './KanbanStatusBadge.vue';
 import MarkdownPreview from './MarkdownPreview.vue';
+import TaskAttachments from './TaskAttachments.vue';
 import {
   AgentComposer,
   formatComposerText,
+  uploadComposerAttachments,
   type AgentComposerSubmitPayload,
+  type UploadedAttachment,
   type ProjectFile,
 } from './agent-composer';
 import { Play, Check, Copy, Trash2, Send } from '@lucide/vue';
 import {
   STATUS_LABEL,
+  type AttachmentRef,
   type Task,
   type TaskChangeLog,
 } from '@/lib/types';
@@ -35,7 +47,7 @@ const props = defineProps<{ task: Task | null; busy: boolean }>();
 const emit = defineEmits<{
   approve: [taskId: string];
   resume: [taskId: string];
-  comment: [taskId: string, comment: string];
+  comment: [taskId: string, comment: string, attachments: UploadedAttachment[]];
   remove: [taskId: string];
   close: [];
 }>();
@@ -43,6 +55,8 @@ const emit = defineEmits<{
 const api = useKanbanApi();
 const task = computed(() => props.task);
 const commentDraft = ref('');
+const preparingComment = ref(false);
+const deleteConfirmationOpen = ref(false);
 const projectFilesCache = new Map<string, Promise<ProjectFile[]>>();
 
 const taskBranch = computed(() => task.value?.taskBranch || '—');
@@ -51,6 +65,12 @@ const canResume = computed(() => task.value?.status === 'paused' || task.value?.
 const hasMergeConflicts = computed(() => Boolean(task.value?.mergeConflictFiles.length));
 const canApprove = computed(() => task.value?.status === 'review' || task.value?.status === 'approved');
 const canComment = computed(() => task.value?.status === 'review');
+const canDelete = computed(() => task.value?.status !== 'running' && task.value?.status !== 'done');
+const deleteDisabledReason = computed(() => {
+  if (task.value?.status === 'running') return '执行中的任务不可删除';
+  if (task.value?.status === 'done') return '已完成的任务不可删除';
+  return '删除任务';
+});
 
 type TaskRecord =
   | {
@@ -58,6 +78,7 @@ type TaskRecord =
       kind: 'description' | 'comment';
       content: string;
       createdAt: string;
+      attachments: AttachmentRef[];
     }
   | {
       id: string;
@@ -66,6 +87,7 @@ type TaskRecord =
       createdAt: string;
       source: TaskChangeLog['source'];
       commit: string | null;
+      attachments: AttachmentRef[];
     };
 
 const taskRecords = computed<TaskRecord[]>(() => {
@@ -79,12 +101,14 @@ const taskRecords = computed<TaskRecord[]>(() => {
       createdAt: log.createdAt,
       source: log.source,
       commit: log.commit,
+      attachments: [],
     })),
     ...task.value.comments.map((comment) => ({
       id: `comment-${comment.id}`,
       kind: 'comment' as const,
       content: comment.content,
       createdAt: comment.createdAt,
+      attachments: comment.attachments ?? comment.images ?? [],
     })),
   ].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
 
@@ -94,6 +118,7 @@ const taskRecords = computed<TaskRecord[]>(() => {
       kind: 'description',
       content: task.value.description,
       createdAt: task.value.createdAt,
+      attachments: task.value.attachments ?? task.value.images ?? [],
     },
     ...history,
   ];
@@ -122,10 +147,18 @@ function resolveProjectFiles() {
   return pending;
 }
 
-function submitComment(payload: AgentComposerSubmitPayload) {
+async function submitComment(payload: AgentComposerSubmitPayload) {
   const comment = formatComposerText(payload);
-  if (!task.value || !comment) return;
-  emit('comment', task.value.id, comment);
+  if (!task.value || (!comment && payload.attachments.length === 0) || preparingComment.value) return;
+  preparingComment.value = true;
+  try {
+    const attachments = await uploadComposerAttachments(payload);
+    emit('comment', task.value.id, comment, attachments);
+  } catch (error) {
+    toast.error(error instanceof Error ? error.message : '附件上传失败');
+  } finally {
+    preparingComment.value = false;
+  }
 }
 
 async function copyAgentSessionId(sessionId: string) {
@@ -141,8 +174,14 @@ watch(
   () => props.task?.id,
   () => {
     commentDraft.value = '';
+    deleteConfirmationOpen.value = false;
   },
 );
+
+function confirmDelete() {
+  if (!task.value || props.busy || !canDelete.value) return;
+  emit('remove', task.value.id);
+}
 
 const metaRows = computed(() => {
   if (!task.value) return [];
@@ -216,6 +255,11 @@ const metaRows = computed(() => {
                     :content="record.content"
                     :placeholder="record.kind === 'description' ? '（无描述）' : '（无内容）'"
                   />
+                  <TaskAttachments
+                    v-if="record.attachments.length"
+                    :task-id="task.id"
+                    :attachments="record.attachments"
+                  />
                 </div>
               </div>
             </section>
@@ -264,14 +308,14 @@ const metaRows = computed(() => {
               :project-root="task.worktreePath"
               :resolve-files="resolveProjectFiles"
               placeholder="输入评论，使用 @ 引用项目文件…"
-              :disabled="busy"
+              :disabled="busy || preparingComment"
               :show-directory="false"
               :clear-on-submit="false"
               @submit="submitComment"
             >
               <template #actions="{ submit, canSubmit }">
-                <Button size="sm" :disabled="busy || !canSubmit" @click="submit">
-                  <Spinner v-if="busy" data-icon="inline-start" />
+                <Button size="sm" :disabled="busy || preparingComment || !canSubmit" @click="submit">
+                  <Spinner v-if="busy || preparingComment" data-icon="inline-start" />
                   <Send v-else data-icon="inline-start" />
                   评论并继续
                 </Button>
@@ -298,16 +342,37 @@ const metaRows = computed(() => {
             审核通过并合回
           </Button>
           <Button
-            variant="ghost"
-            size="icon"
-            aria-label="删除任务"
-            :disabled="busy"
-            @click="emit('remove', task.id)"
+            variant="destructive"
+            :disabled="busy || !canDelete"
+            :title="deleteDisabledReason"
+            @click="deleteConfirmationOpen = true"
           >
             <Trash2 data-icon="inline-start" />
+            删除任务
           </Button>
         </SheetFooter>
       </template>
     </SheetContent>
   </Sheet>
+
+  <Dialog v-model:open="deleteConfirmationOpen">
+    <DialogContent :show-close-button="false">
+      <DialogHeader>
+        <DialogTitle>确认删除任务？</DialogTitle>
+        <DialogDescription>
+          对应的 Worktree 和任务分支会被永久删除。此操作无法撤销。
+        </DialogDescription>
+      </DialogHeader>
+      <DialogFooter>
+        <Button variant="outline" :disabled="busy" @click="deleteConfirmationOpen = false">
+          取消
+        </Button>
+        <Button variant="destructive" :disabled="busy" @click="confirmDelete">
+          <Spinner v-if="busy" data-icon="inline-start" />
+          <Trash2 v-else data-icon="inline-start" />
+          删除任务
+        </Button>
+      </DialogFooter>
+    </DialogContent>
+  </Dialog>
 </template>

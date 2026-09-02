@@ -14,7 +14,7 @@ import {
 } from '../lib/update.js';
 import { parseUpdaterArgs, runUpdater } from '../lib/updater.js';
 
-assert.equal(PLUGIN_VERSION, '0.6.0');
+assert.equal(PLUGIN_VERSION, '0.7.0');
 assert.deepEqual(parseStableVersion('v1.2.3'), { version: '1.2.3', parts: [1, 2, 3] });
 assert.equal(parseStableVersion('1.2.3-beta.1'), null);
 assert.equal(compareStableVersions('0.6.0', '0.5.9'), 1);

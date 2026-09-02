@@ -1,5 +1,6 @@
 import { inject } from 'vue';
 import type {
+  AttachmentRef,
   Board,
   CreateTaskOptions,
   PluginUpdateInfo,
@@ -7,6 +8,7 @@ import type {
   Project,
   RemoteResult,
   Task,
+  TaskImageData,
   TaskStatus,
 } from './types';
 
@@ -16,6 +18,11 @@ export interface KanbanApi {
   acknowledgePluginUpdate(input: { targetVersion: string }): Promise<RemoteResult<{ cleared: boolean }>>;
   listProjects(): Promise<RemoteResult<Project[]>>;
   getBoard(): Promise<RemoteResult<Board>>;
+  getTaskImage(input: {
+    taskId: string;
+    attachmentId: string;
+  }): Promise<RemoteResult<TaskImageData>>;
+  listTaskSessions(): Promise<RemoteResult<{ sessionIds: string[] }>>;
   listCreateTaskOptions(): Promise<RemoteResult<CreateTaskOptions>>;
   listBranches(input: { projectId: string }): Promise<RemoteResult<{ branches: string[]; current: string }>>;
   listProjectPaths(input: { projectId: string }): Promise<RemoteResult<{ paths: string[] }>>;
@@ -23,6 +30,7 @@ export interface KanbanApi {
     projectId: string;
     title: string;
     description?: string;
+    attachments?: AttachmentRef[];
     baseBranch?: string;
     modelProvider?: string;
     model?: string;
@@ -31,7 +39,11 @@ export interface KanbanApi {
   moveTask(input: { taskId: string; to: TaskStatus }): Promise<RemoteResult<Task>>;
   approveTask(input: { taskId: string }): Promise<RemoteResult<Task>>;
   resumeTask(input: { taskId: string }): Promise<RemoteResult<Task>>;
-  commentTask(input: { taskId: string; comment: string }): Promise<RemoteResult<Task>>;
+  commentTask(input: {
+    taskId: string;
+    comment: string;
+    attachments?: AttachmentRef[];
+  }): Promise<RemoteResult<Task>>;
   deleteTask(input: { taskId: string }): Promise<RemoteResult<{ deleted: boolean }>>;
 }
 

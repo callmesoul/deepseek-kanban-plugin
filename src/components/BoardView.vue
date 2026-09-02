@@ -18,7 +18,7 @@ import KanbanColumn from './KanbanColumn.vue';
 import NewTaskDialog from './NewTaskDialog.vue';
 import RoadmapView from './RoadmapView.vue';
 import TaskDetailSheet from './TaskDetailSheet.vue';
-import type { Task, TaskStatus } from '@/lib/types';
+import type { AttachmentRef, Task, TaskStatus } from '@/lib/types';
 
 const board = useBoard();
 const detailTaskId = ref<string | null>(null);
@@ -42,6 +42,7 @@ async function handleCreate(input: {
   projectId: string;
   title: string;
   description: string;
+  attachments: AttachmentRef[];
   baseBranch: string;
   modelProvider?: string;
   model?: string;
@@ -118,10 +119,14 @@ async function handleResume(taskId: string) {
   }
 }
 
-async function handleComment(taskId: string, comment: string) {
+async function handleComment(
+  taskId: string,
+  comment: string,
+  attachments: AttachmentRef[],
+) {
   detailBusy.value = true;
   try {
-    await board.commentTask(taskId, comment);
+    await board.commentTask(taskId, comment, attachments);
     toast.success('评论已发送，agent 正在继续执行');
     detailTaskId.value = null;
   } catch (e: any) {
