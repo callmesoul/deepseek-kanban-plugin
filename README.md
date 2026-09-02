@@ -38,6 +38,63 @@ dsh plugin --profile web add "github:callmesoul/deepseek-kanban-plugin#main"
 - **虚拟任务工作区**：DSH 侧边栏固定显示一个虚拟「看板任务」分组，汇总所有项目的看板 Agent 会话；它不注册真实工作区，也不改变会话实际 `cwd`。
 - **一键更新**：GitHub Release 发布新稳定版本时，在 DSH 全局界面提示更新；点击即可安装，systemd 环境会自动重启服务并刷新页面。
 
+## 与其他 DSH 看板插件对比
+
+> 调研快照：2026-09-02。下表以各项目当日 GitHub README 和公开实现为依据；`—` 表示其 README 未将该能力作为功能公开说明，不等同于断言底层绝对无法实现。社区项目迭代很快，选型前请点击仓库链接查看最新文档。
+
+### 代表性项目
+
+| 项目 | 主要定位 | 与本插件的主要差异 |
+| --- | --- | --- |
+| **本插件** | 面向代码交付的自动化看板 | 创建任务后自动建立 Worktree、运行 Agent、提交改动；人工审核通过后自动合并、清理，冲突可交回同一 Agent 会话处理。 |
+| [cloader/dsh-taskboard](https://github.com/cloader/dsh-taskboard) | 人与 Agent 共用的完整任务台账 | Cron、任务模板、DoD 清单、结构化报告、Agent 工具、Diff 和多仓库镜像等管理能力更丰富；Worktree 是可选项且每次执行建立新会话，合并与清理由用户在详情页触发。本插件更强调默认隔离、单任务单会话和审核后的自动收尾。 |
+| [FuncWei/dsh-kanban](https://github.com/FuncWei/dsh-kanban) | Hermes 全功能看板移植 | 提供 9 列、多看板、依赖关系、批量操作、诊断、WebSocket 和 SQLite，借助 Python/FastAPI sidecar 与 headless worker 执行。本插件不需要额外 sidecar，重点是与项目 Git 分支直接形成提交—审核—合并闭环。 |
+| [scwlkq/dsh-task-board](https://github.com/scwlkq/dsh-task-board) | DSH 原生、可持久化和可审核的任务板 | 支持验收标准、图片、执行轮次、审核/驳回/重试和 Session 历史；本插件进一步内建每任务 Worktree、系统提交、基础分支合并及冲突恢复。 |
+| [zhu1090093659/dsh-web / dsh-task-board](https://github.com/zhu1090093659/dsh-web/tree/dev/packages/dsh-task-board) | Host 权威账本与周期任务 | 强项是 Cron、权限确认门、Preset 固定、重启对账及可选防休眠；每次运行创建独立会话。它适合长期调度，本插件更适合一次开发任务持续迭代并最终落到 Git。 |
+| [isolat-3k/dsh-kanban](https://github.com/isolat-3k/dsh-kanban) | Hermes 风格 Agent 协作看板 | 提供 9 列、多看板、Agent 管理工具、心跳、进度文件与自动派发；本插件采用 DSH Storage Domain 和原生 Agent Remote，更专注自动提交、人工审核、合并和冲突处理。 |
+| [shengsheng90/DSH-taskboard](https://github.com/shengsheng90/DSH-taskboard) | SQLite 项目管理与受控验收 | 提供项目、关系、附件、工作流、CLI、Skill 和 Agent 工具，且只允许人工完成验收；本插件的数据模型更轻，换取开箱即用的 Git Worktree 交付流水线。 |
+| [jcc1997/dsh-plugins / kanban](https://github.com/jcc1997/dsh-plugins/tree/main/plugins/kanban) | 可配置 Kanban、门禁和插件化研发流程 | 看板本体支持自定义列、模板、31 个 Agent 工具和可编程门禁；GitHub 分支/MR、Pipeline 与文档审批由配套插件组合。本插件把本地分支隔离、执行、审核和合并收敛在一个插件内，配置更少、流程更固定。 |
+| [Ericwong5021/dsh-kanban](https://github.com/Ericwong5021/dsh-kanban) | 现有 DSH Session 的规划与分诊视图 | 卡片本质是 Session，运行/阻塞/完成状态来自实时会话，手工列位置保存在浏览器。本插件拥有独立的 Host 任务状态机，并管理 Session 之外的 Git 生命周期。 |
+| [alpacachen/dsh-kanban](https://github.com/alpacachen/dsh-kanban) / [StruggleYang/dsh-project-kanban](https://github.com/StruggleYang/dsh-project-kanban) | 人与 Agent 共同维护的项目规划板 | 强调 Agent 建卡、改卡、自定义列、标签、优先级、搜索等规划体验，不负责自动改码和合并；本插件偏向把已经明确的开发任务直接执行并交付。 |
+| [nexsjournal/dsh-tryboard-plugin](https://github.com/nexsjournal/dsh-tryboard-plugin) | DSH 内的手工 Trello 看板 | 支持多看板、自定义列和同列排序，数据存入 DSH 设置，但不驱动 Agent。本插件列结构固定，由状态机保障执行与审核语义。 |
+
+另外还发现了若干侧重点相邻的实现：[ANITOCE/dsh-task-board](https://github.com/ANITOCE/dsh-task-board)（浏览器端 Cron 与真实 Session 执行）、[raosay/dsh-kanban](https://github.com/raosay/dsh-kanban)（精简看板与逐任务模型选择）、[maochiy/dsh-taskboard-plugin](https://github.com/maochiy/dsh-taskboard-plugin)（通用任务字段、Session 关联与 Agent 工具）以及 [SLin-code/dsh-task-notice-board](https://github.com/SLin-code/dsh-task-notice-board)（Workspace → Task → Session 层级和跨 Session 任务记忆）。它们分别更偏向轻量调度、通用任务管理或多会话协作，并非与本插件完全相同的 Git 交付流程。
+
+### 核心能力矩阵
+
+| 能力 | 本插件 | cloader | FuncWei | scwlkq | dsh-web | Ericwong | tryboard |
+| --- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| Host 侧权威持久化 | ✅ Storage Domain | ✅ JSON 台账 | ✅ SQLite | ✅ DSH Storage | ✅ JSON 账本 | △ Session 为主，列位置在浏览器 | △ DSH Settings |
+| 创建任务后由真实 Agent 执行 | ✅ 自动领取 | ✅ 手动/定时/Agent 认领 | ✅ headless worker | ✅ | ✅ | ✅ | — |
+| 每任务独立 Git Worktree | ✅ 默认且必经 | △ 可选、每次执行 | — | — | — | — | — |
+| 系统统一提交 Agent 改动 | ✅ | — | — | — | — | — | — |
+| 人审后自动合并并清理 | ✅ | △ 手动一键操作 | — | — | — | — | — |
+| 合并冲突交回原 Agent 解决 | ✅ | — | — | — | — | — | — |
+| 后续评论复用同一 Agent 会话 | ✅ | △ 新执行会话读取交接 | — | ✅ | — | ✅ 卡片即会话 | — |
+| `@` 项目文件引用 + 任意文件上传 | ✅ | — | — | △ 图片 | — | — | — |
+| Host 端定时执行 | ✅ 单次时间 | ✅ Cron | ✅ Scheduled 流程 | — | ✅ Cron | — | — |
+| 看板 + Roadmap 甘特图 | ✅ | — | — | — | — | — | — |
+| 应用内检查 Release 并一键更新 | ✅ | — | — | — | — | — | — |
+| 不依赖额外 sidecar / 数据库 | ✅ | ✅ | — | ✅ | ✅ | ✅ | ✅ |
+
+### 本插件的优势
+
+1. **从任务到代码落地主路径最短**：它不是只给任务或 Session 分栏，而是默认执行 `创建 → Worktree 隔离 → Agent 改码 → 系统提交 → 人工审核 → 自动合并与清理`，无需再拼接 Git 或 Pipeline 插件。
+2. **隔离不是可选约定，而是状态机的一部分**：每个 Git 任务始终从选定基础分支创建独立任务分支和 Worktree；Agent 不操作分支，提交、合并和清理由主机端统一完成。
+3. **审核通过即可完成交付**：基础分支正被主工作区使用时通过 `--autostash` 合并；未被签出时使用临时 Worktree 合并并原子更新引用。冲突会安全回滚、记录文件，再由原 Agent 解决，主仓库不会停在半合并状态。
+4. **任务上下文连续**：首次执行即绑定唯一 Agent 会话；暂停恢复、审核意见、追加附件和冲突处理都向该会话追加 followup，避免多轮修改散落在不同会话中。
+5. **输入材料可直接被 Agent 使用**：`@` 搜索遵循项目 Git 文件边界；图片以原生内容块发送，普通文件以二进制流进入 SHA-256 内容寻址存储，并挂载到任务 Worktree，适合带设计稿、日志、压缩包或文档下达任务。
+6. **交付过程更容易审阅**：看板与 Roadmap 双视图同时覆盖状态和时间；详情页统一展示任务描述、Agent 输出、评论、附件、改动摘要和 commit hash。
+7. **维护链路内置**：稳定 GitHub Release 出现后可在 DSH 内完成版本校验、安装和状态恢复；本地 `file:` / `link:` 安装会自动禁用更新，避免覆盖开发源码。
+
+### 什么时候更适合选择其他项目
+
+- 需要**自定义列、多看板、父子依赖、批量操作或复杂任务字段**：优先考察 FuncWei、shengsheng90、nexsjournal 或 alpacachen 的实现。
+- 需要**重复 Cron、模板、验收清单、Agent 自助认领、结构化报告或多仓库镜像**：`cloader/dsh-taskboard` 的任务管理面更完整。
+- 需要**自定义门禁、GitHub MR、可编排 Pipeline 和多插件组合**：`jcc1997/dsh-plugins` 更灵活。
+- 需要**一个任务承载多个 Session，并在 Session 间沉淀受控长期记忆**：`SLin-code/dsh-task-notice-board` 更贴合该模型。
+- 只想整理现有 Session 或手工规划，不希望插件自动改动仓库：Ericwong、nexsjournal、alpacachen 或 StruggleYang 的方案更轻量。
+
 ## 架构概览
 
 DSH 是「主机平面 cordis 插件 + 客户端插件」双层架构，本插件对应两个部分：
