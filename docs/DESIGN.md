@@ -37,7 +37,7 @@ DSH 是「主机平面 cordis 插件 + 客户端 React 插件」双层架构，�
   - 数据落 `ctx.storageDomain` 的 `kanban` 域（tasks 表），持久化于 `$DSH_HOME/storages`。
   - 项目 = `ctx.workspaceRegistry.list()`（与工作区同步绑定）。
   - git 操作用 `child_process`（主机平面，不受沙箱限制）。
-- agent 首轮执行用 `ctx.agents.create({ meta:{cwd, agentPreset:'standard'} })` + `agent.followup()` + `whenIdle()`，后续执行统一用 `ctx.agents.resume()`；新会话通过 `ctx.permissionPresets.set(session, 'danger-full-access')` 默认启用 Full access，恢复会话不覆盖其当前权限。
+- agent 首轮执行用 `ctx.agents.create({ meta:{cwd, agentPreset:'standard'} })` + `agent.followup()` + `whenIdle()`；后续执行先通过 `ctx.agents.get()` 复用 live 会话，否则调用 `ctx.agents.resume()`。单次等待到期时以 Agent 的 `running` 状态作为健康检查并续期，只有非运行状态仍无法 idle 才报超时；新会话通过 `ctx.permissionPresets.set(session, 'danger-full-access')` 默认启用 Full access，恢复会话不覆盖其当前权限。
 - agent 会话会写入任务标题；客户端根据所有任务记录的 Agent 会话 ID，在 DSH 侧边栏投影一个跨项目的虚拟「看板任务」分组，不创建真实工作区，也不改变会话的 worktree `cwd`。启动时会迁移会话并清理旧版遗留的真实任务工作区。
 - `packages/client` — 客户端插件 `@deepseek-kanban/client`（React）：
   - 注册 `sidebar.footer.action`（侧边栏入口）与 `shell.overlay`（全屏看板面板）。
@@ -47,7 +47,7 @@ DSH 是「主机平面 cordis 插件 + 客户端 React 插件」双层架构，�
 ## git 流程
 
 - 新建任务：记录 `baseBranch`（默认当前分支）与 `taskBranch`（`kanban/<id前8>`）。
-- 新建任务还可选择执行模型与执行时间：模型默认取 DSH 默认模型；执行时间留空立即执行，未来时间由主机端定时器到点后自动领取。
+- 新建任务还可选择执行模型与执行时间：模型默认取 DSH 默认模型；执行时间留空立即执行，未来时间由主机端定时器到点后自动领取；启动时恢复未来定时器，并立即补跑停机期间已到期的待领取任务。
 - 执行：`git checkout <base>` → `git checkout -b <taskBranch>` → agent 改码 → `git add -A && git commit`。
 - 切分支前若有未提交改动（`git status --porcelain` 非空）→ 任务 `paused`，提示「分支有未提交的代码」。
 - 审核通过后：在基础分支执行 `git merge --no-ff <taskBranch>`；失败时捕获冲突文件并 `git merge --abort`，任务进入 `paused`，主仓库保持干净。

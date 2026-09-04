@@ -179,6 +179,19 @@ try {
         status = 'idle';
         resolveIdle?.();
       },
+      complete() {
+        if (status !== 'running') return;
+        session.events.push({
+          type: 'turn/end',
+          seq: session.seq++,
+          data: { turn, reason: { kind: 'completed' } },
+        });
+        status = 'idle';
+        resolveIdle?.();
+      },
+      markNotRunning() {
+        status = 'idle';
+      },
       whenIdle: () => idle,
     };
     liveAgents.set(sessionId, agent);
@@ -293,6 +306,31 @@ try {
     mergeConflictFiles: [],
   });
 
+  const overdueAt = new Date(Date.now() - 60_000).toISOString();
+  table.map.set('overdue-scheduled-task', {
+    id: 'overdue-scheduled-task',
+    projectId: workspace.id,
+    title: 'overdue scheduled task',
+    description: '',
+    images: [],
+    attachments: [],
+    baseBranch: 'master',
+    taskBranch: 'kanban/overdue',
+    worktreePath: '',
+    status: 'todo',
+    message: `等待执行时间：${new Date(overdueAt).toLocaleString('zh-CN', { hour12: false })}`,
+    agentSessionId: null,
+    agentSessionIds: [],
+    modelProvider: '',
+    model: '',
+    executeAt: overdueAt,
+    createdAt: overdueAt,
+    updatedAt: overdueAt,
+    comments: [],
+    changeLogs: [],
+    mergeConflictFiles: [],
+  });
+
   const service = new KanbanService(ctx);
   await service[Service.init]();
   const recoveredTask = table.get('orphaned-running-task');
@@ -303,6 +341,15 @@ try {
     throw new Error(`orphaned running task was not recovered: ${JSON.stringify(recoveredTask)}`);
   }
   await table.delete('orphaned-running-task');
+  await waitFor(
+    () => table.get('overdue-scheduled-task')?.status === 'review',
+    'overdue scheduled task to run after restore',
+  );
+  await service.deleteTask({ taskId: 'overdue-scheduled-task' });
+  sentMessages.length = 0;
+  permissionPresetSelections.length = 0;
+  createdAgentSessionIds.length = 0;
+  resumedAgentSessionIds.length = 0;
   const attachmentRoute = registeredRoutes.find((route) => route.path === '/kanban/attachments');
   if (!attachmentRoute) throw new Error('attachment route was not registered');
   if (kanbanWorkspaces(workspaceEntries).length !== 0) {
@@ -640,10 +687,54 @@ try {
 
   service.agentTimeoutMs = 25;
   hangNextAgentTurn = true;
+  const longRunningTask = await service.createTask({ projectId: workspace.id, title: 'long running agent task' });
+  await waitFor(
+    () => table.get(longRunningTask.id)?.status === 'running' && liveAgents.size > 0,
+    'long running agent task to start',
+  );
+  const longRunningSessionId = table.get(longRunningTask.id).agentSessionId;
+  const sentBeforeLiveReuse = sentMessages.length;
+  const resumedBeforeLiveReuse = resumedAgentSessionIds.length;
+  const reusedLiveExecution = service.continueAgent(
+    table.get(longRunningTask.id),
+    '不应重复发送的继续指令',
+    table.get(longRunningTask.id).worktreePath,
+  );
+  await new Promise((resolve) => setTimeout(resolve, 80));
+  if (
+    table.get(longRunningTask.id)?.status !== 'running'
+    || sentMessages.length !== sentBeforeLiveReuse
+    || resumedAgentSessionIds.length !== resumedBeforeLiveReuse
+  ) {
+    throw new Error(`healthy long-running Agent did not extend timeout or reuse live session: ${JSON.stringify({
+      task: table.get(longRunningTask.id),
+      sentBeforeLiveReuse,
+      sentAfterLiveReuse: sentMessages.length,
+      resumedBeforeLiveReuse,
+      resumedAfterLiveReuse: resumedAgentSessionIds.length,
+    })}`);
+  }
+  liveAgents.get(longRunningSessionId)?.complete();
+  const reusedLiveResult = await reusedLiveExecution;
+  if (reusedLiveResult.error) {
+    throw new Error(`live Agent reuse failed: ${JSON.stringify(reusedLiveResult)}`);
+  }
+  await waitFor(
+    () => table.get(longRunningTask.id)?.status === 'review',
+    'long running agent task to reach review after completion',
+  );
+  await service.deleteTask({ taskId: longRunningTask.id });
+
+  hangNextAgentTurn = true;
   const timedOutTask = await service.createTask({ projectId: workspace.id, title: 'timed out agent task' });
   await waitFor(
+    () => table.get(timedOutTask.id)?.status === 'running' && liveAgents.size > 0,
+    'timed out agent task to start',
+  );
+  liveAgents.get(table.get(timedOutTask.id).agentSessionId)?.markNotRunning();
+  await waitFor(
     async () => (await service.getBoard()).tasks.find((item) => item.id === timedOutTask.id)?.status === 'paused',
-    'timed out agent task to pause',
+    'non-running stalled agent task to pause',
   );
   const timedOut = (await service.getBoard()).tasks.find((item) => item.id === timedOutTask.id);
   if (timedOut?.message !== 'agent 执行失败：agent 执行超时，请稍后重试') {
