@@ -1,24 +1,26 @@
 # @deepseek-kanban/plugin
 
-DeepSeek Harness（DSH）任务看板插件 —— 在 DSH Web 左侧边栏提供「任务看板」，把**项目、git 分支、AI agent** 串成一条自动化开发流水线：创建任务 → agent 自动领取执行 → 自动提交 → 人工审核 → 自动合并回基础分支。
+DeepSeek Harness（DSH）任务看板插件 —— 在 DSH Web 左侧边栏提供「任务看板」，把**项目、隔离工作区、AI agent** 串成一条自动化开发流水线：创建任务 → agent 自动领取执行 → 生成变更 → 人工审核 → 自动交付到项目。
 
 ## 安装
 
 从 GitHub 直接安装（推荐）：
 
 ```bash
-dsh plugin --profile web add "github:callmesoul/deepseek-kanban-plugin"
+dsh plugin --profile desktop add "github:callmesoul/deepseek-kanban-plugin"
 ```
 
 如需指定版本 / 分支（Tag 或 commit 后跟 `#`）：
 
 ```bash
-dsh plugin --profile web add "github:callmesoul/deepseek-kanban-plugin#main"
+dsh plugin --profile desktop add "github:callmesoul/deepseek-kanban-plugin#main"
 ```
 
 安装完成后**重启 / 重载 DSH 应用**，侧边栏底部出现「任务看板」入口即安装成功。
 
-> 强制刷新安装：`dsh plugin --profile web remove @deepseek-kanban/plugin && dsh plugin --profile web add "github:callmesoul/deepseek-kanban-plugin"`
+> 强制刷新安装：`dsh plugin --profile desktop remove @deepseek-kanban/plugin && dsh plugin --profile desktop add "github:callmesoul/deepseek-kanban-plugin"`
+
+> `dsh` CLI 未在 PATH 上时，可直接用桌面版内置启动器：`"$LOCALAPPDATA/Programs/DeepSeek Harness/resources/runtime/cli/bin/dsh.cmd" plugin --profile desktop add ...`；也可以在 DSH 的「插件市场」里安装。
 
 ## 功能特性
 
@@ -27,13 +29,14 @@ dsh plugin --profile web add "github:callmesoul/deepseek-kanban-plugin#main"
 - **任务状态机**：`待领取 → 执行中 → 待审查 → 已审核 → 已完成`，含 `暂停中` 兜底状态。支持看板列间拖拽手动流转。
 - **Agent 输入框**：新建任务描述与任务详情评论统一使用 [agent-textarea](https://github.com/callmesoul/agent-textarea) 的 Agent Composer，支持项目文件引用、任意附件、拖放和剪贴板粘贴；附件以二进制流上传并按内容哈希存储。
 - **文件引用**：在输入框中输入 `@` 即弹出当前项目的文件/目录候选，支持 ↑/↓ 选择、Enter/Tab 确认、Esc 关闭；git 项目走 `git ls-files`（尊重 .gitignore），非 git 项目回退目录扫描。
-- **agent 自动执行**：任务被 agent 领取后自动改码并 `git commit`，无需人工介入。
+- **agent 自动执行**：任务被 agent 领取后在隔离工作区改码；Git 项目自动提交，非 Git 项目自动生成文件变更集。
 - **Agent 默认权限**：看板任务新建的 Agent 会话默认使用 Full access；恢复已有会话时保留会话当前权限设置。
 - **git worktree 隔离**：每个任务使用独立 git worktree（`git worktree add`）+ 独立任务分支（`kanban/<id前8>`），从基础分支签出，不影响主工作区。
-- **审核合并**：人工「审核通过」后自动 `merge --no-ff` 回基础分支并删除任务分支与 worktree。
+- **非 Git 快照隔离**：普通目录、无 commit 仓库或 Git CLI 不可用时，自动创建基线副本和 Agent 工作副本；审核前不修改原项目。
+- **审核交付**：Git 项目自动 `merge --no-ff`；快照项目在检查相关文件未被外部修改后备份并应用，写入失败自动恢复。
 - **单任务单会话**：Agent 会话在首次创建后立即绑定到任务；异常暂停后的恢复、待审查评论续跑和冲突处理都复用该会话，不会静默新建会话；若会话仍在正常执行则继续等待，不重复发送 followup。
-- **新建任务配置**：可选执行模型、定时执行时间；基础分支为下拉选择（从项目 git 分支实时获取）。
-- **改动记录**：任务详情记录每次 agent 执行后的改动说明（优先取 agent 最终输出全文，回退 git 变更摘要或系统消息），标注来源（agent / git / system）与 commit hash。
+- **新建任务配置**：可选执行模型、定时执行时间；Git 项目还可从项目分支中选择基础分支。
+- **改动记录**：任务详情记录每次 agent 执行后的改动说明、Git commit 或快照新增/修改/删除统计。
 - **定时执行恢复**：设了定时执行的任务，DSH 重启后自动恢复未来定时器；若停机期间错过执行时间，则在下次启动后立即补跑。
 - **虚拟任务工作区**：DSH 侧边栏固定显示一个虚拟「看板任务」分组，汇总所有项目的看板 Agent 会话；它不注册真实工作区，也不改变会话实际 `cwd`。
 - **一键更新**：GitHub Release 发布新稳定版本时，在 DSH 全局界面提示更新；点击即可安装，systemd 环境会自动重启服务并刷新页面。
@@ -120,7 +123,7 @@ DSH 是「主机平面 cordis 插件 + 客户端插件」双层架构，本插�
 └────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-- **主机端**（`lib/index.js`）：状态机、git worktree 调度、agent 执行、数据持久化。
+- **主机端**（`lib/index.js`）：状态机、Git/快照工作区调度、agent 执行、数据持久化。
 - **客户端**（`src/client.ts` + `src/` 看板 UI）：入口注册、看板展示与交互。
 - 客户端经 `ctx.remote.kanban.<method>` 调用主机远程方法；附件上传和读取直接使用同源 HTTP 二进制路由。看板打开期间约 4s 轮询 `getBoard()`，页面不可见时暂停轮询。
 
@@ -137,7 +140,9 @@ DSH 是「主机平面 cordis 插件 + 客户端插件」双层架构，本插�
 ├── scripts/
 │   ├── wrap-client.mjs       # 把 vite CJS 产物包装成 DSH ModuleLoader 格式
 │   ├── smoke-host.mjs        # 主机端冒烟测试（内存态跑完整任务流转）
-│   └── deploy-local.sh       # 本地部署脚本（build → 重装插件 → 重建 peer symlink → 重启 → RPC 自检）
+│   ├── test-update.mjs       # 更新器单元测试（版本比较、安装来源、profile 探测）
+│   ├── sync-dsh.mjs          # 安装到 DSH profile（跨平台；Windows 下自动中转 UNC 路径）
+│   └── deploy-local.sh       # 本地部署薄包装（build → sync-dsh.mjs）
 ├── src/                      # 客户端源码（Vue 3 + shadcn-vue）
 │   ├── client.ts             # React 外壳：挂载 Remote、注册侧边栏入口与 overlay
 │   ├── kanban-entry.ts       # Vue 应用挂载/卸载
@@ -158,7 +163,7 @@ DSH 是「主机平面 cordis 插件 + 客户端插件」双层架构，本插�
 ### 环境要求
 
 - Node.js ≥ 22.12（pnpm 管理依赖）
-- 已安装 DSH（`dsh` CLI 可用，含 `web` profile）
+- DSH ≥ 0.2.0（桌面版内置 `desktop` profile；本插件兼容 0.1.7-rc.1 ~ 0.2.x）
 - 项目基于 WSL（Ubuntu），以下命令在 WSL 内执行
 
 ### 安装依赖
@@ -180,20 +185,20 @@ pnpm watch        # 开发时增量构建
 **普通用户 / 快速体验（从 GitHub 安装）：**
 
 ```bash
-dsh plugin --profile web add "github:callmesoul/deepseek-kanban-plugin"
+dsh plugin --profile desktop add "github:callmesoul/deepseek-kanban-plugin"
 ```
 
 **本地开发（`file:` 协议，硬链接实时生效）：**
 
 ```bash
 # 方式一：直接安装（推荐）
-dsh plugin --profile web add "file:$(pwd)"
+dsh plugin --profile desktop add "file:$(pwd)"
 
 # 方式二：完整重建 + 重装
-pnpm sync:dsh     # 等价于 build + remove + add
+pnpm sync:dsh     # build + 自动中转 + remove + add（跨 Windows/WSL 均可用）
 ```
 
-> ⚠️ `file:` 协议路径必须是 WSL 原生路径（`/home/callmesoul/...`），不要用 `\\wsl.localhost\...` 形式的 Windows 路径，否则 pnpm 会报 `ERR_PNPM_LINKED_PKG_DIR_NOT_FOUND`。
+> ℹ️ Windows 版 pnpm 无法直接从 `\\wsl.localhost\...` 这类 UNC 路径安装 `file:` 依赖。`pnpm sync:dsh` 会自动把产物复制到本地中转目录（`%LOCALAPPDATA%\dsh-kanban-plugin-stage`）再安装，无需手工处理；如手动执行 `dsh plugin add`，请先把仓库产物复制到本地盘。
 
 安装后**重启 / 重载 DSH 应用**（或重载插件）生效。之后侧边栏底部出现「任务看板」入口。
 
@@ -216,13 +221,13 @@ pnpm test:update  # 验证版本、来源、状态和安装命令安全约束
 - 通过 `github:callmesoul/deepseek-kanban-plugin` 安装的插件支持一键更新。
 - 更新器只安装提示中经过主机端校验的最新稳定 Tag，不执行浏览器传入的任意命令。
 - 使用 `file:`、`link:` 的本地开发安装不会检查或覆盖源码。
-- `dsh-web.service` 正在运行时，安装完成后自动重启服务；其他启动方式会提示手动重启 DSH。
+- Linux（systemd）下 `dsh-<profile>.service` 正在运行时，安装完成后自动重启服务；桌面版等不带 systemd 的宿主会提示手动重启 DSH。
 - 更新状态保存在 `~/.dsh/updates/deepseek-kanban.json`，安装或重启失败时会在提示中显示错误。
 
 ### 新建任务
 
 1. 点击看板「新建任务」。
-2. 选择**项目**（来自 DSH 工作区）；选择项目后自动加载该项目 git 分支，作为**基础分支**下拉选项（默认当前分支）。非 git 仓库的项目创建后直接进入「暂停中」。
+2. 选择**项目**（来自 DSH 工作区）。正常 Git 仓库会加载基础分支；非 Git 目录、无 commit 仓库或 Git CLI 不可用时自动使用隔离文件快照。
 3. 填写标题与描述，可选选择**执行模型**与**执行时间**（留空立即执行，未来时间到点由主机端定时器自动领取）。
 4. 创建后任务进入「待领取」，agent 自动领取执行。
 
@@ -234,7 +239,7 @@ pnpm test:update  # 验证版本、来源、状态和安装命令安全约束
 
 - 输入 `@` 可搜索并引用当前项目中的文件或目录；使用 ↑/↓ 切换候选，Enter/Tab 确认，Esc 关闭。
 - 可通过附件按钮、拖放或剪贴板粘贴添加图片、文档、压缩包、音视频等任意文件，并在提交前预览或移除。单文件上限 50 MiB，每条消息附件总量上限 100 MiB、最多 10 个。
-- 附件通过原始二进制请求上传到 SHA-256 内容寻址存储，任务记录只保存引用。图片还会由 DSH 图片服务校验并以原生图片内容块发送给 Agent；其他文件会复制到任务 Worktree 内被 Git 忽略的 `.kanban-attachments` 目录供 Agent 读取。
+- 附件通过原始二进制请求上传到 SHA-256 内容寻址存储，任务记录只保存引用。图片还会由 DSH 图片服务校验并以原生图片内容块发送给 Agent；其他文件会复制到任务隔离工作区的 `.kanban-attachments` 目录供 Agent 读取，不进入 Git 提交或快照变更集。
 - 详情页通过受任务归属校验的同源 URL 懒加载图片或下载文件，支持浏览器缓存和 Range 请求，不再通过 JSON RPC 返回 Base64。
 - 任务描述中 Enter 用于换行；评论框中 Enter 提交，Shift+Enter 换行。中文输入法组合输入期间不会误提交。
 - 文本仍按 Markdown 保存并在任务详情中安全渲染，但输入区域不提供实时预览或 Markdown 语法提示。
@@ -243,31 +248,25 @@ pnpm test:update  # 验证版本、来源、状态和安装命令安全约束
 ### 状态流转
 
 ```
-                          ┌──────────────────────────────────────────────────────────┐
-                          │                                                          │
-                          ▼                                                          │
-待领取(todo) ──自动领取──▶ 执行中(running) ──agent完成+commit──▶ 待审查(review)
-     │                         │                                        │
-     │                         │ git/agent/commit 失败                   │ 评论并继续
-     │                         ▼                                        ▼
-     │                      暂停中(paused) ◀──── 合并失败 ◀──── 已审核(approved)
-     │                         │                          ▲                │
-     │      继续执行(resume)    │                          │                │ 审核通过
-     └─────────────────────────┘                          │                │ (触发合并)
-            ▲                                              │                ▼
-            └── 新建非 git / 无 commit ────────────────    │             已完成(done)
-                                                            │
-                                              审核通过 ──────┘
-                                              (非 review 状态拖拽到此也触发合并)
+待领取(todo) ──自动领取──▶ 执行中(running) ──生成变更──▶ 待审查(review)
+     ▲                         │                              │
+     │                         │ 执行失败                     │ 审核通过
+     │                         ▼                              ▼
+     └──────继续执行────── 暂停中(paused) ◀──交付失败── 已审核(approved)
+                              ▲                              │
+                              └────────并发冲突──────────────┘
+                                                             │ 自动交付
+                                                             ▼
+                                                          已完成(done)
 ```
 
-- **待领取（todo）**：新建任务默认状态。agent 自动领取后进入执行中；若项目不是 git 仓库或无 commit，直接进入暂停中。
-- **执行中（running）**：agent 正在独立 worktree 中改码。完成后自动 `git add -A && git commit`，进入待审查。
-- **暂停中（paused）**：兜底状态。触发条件：项目不是 git 仓库、仓库无 commit、agent 创建/执行失败、提交失败、合并失败。Agent 会话一旦创建便立即绑定；恢复时继续使用该会话。合并冲突会列出冲突文件并安全回滚主仓库；用户可点击「让 Agent 解决冲突」进入恢复流程。
-- **待审查（review）**：等待人工审核。可查看改动记录与评论；「审核通过」后进入已审核并触发自动合并；也可评论让 agent 继续修改（回到执行中）。
-- **已审核（approved）**：agent 正在将任务分支合并回基础分支。合并失败会回退暂停中。
-- **已完成（done）**：任务分支已合并回基础分支，worktree 已删除。
-- **手动流转**：看板列间拖拽可手动移动任务状态；拖到 `执行中` 会触发 agent 执行，拖到 `已审核` 会触发合并。
+- **待领取（todo）**：新建任务默认状态，agent 自动领取后进入执行中。
+- **执行中（running）**：agent 在 Git Worktree 或文件快照工作副本中改码，完成后生成 Git commit 或文件变更集。
+- **暂停中（paused）**：兜底状态。Agent、工作区、提交、合并、快照应用或并发冲突失败时进入；恢复时继续使用同一个 Agent 会话。
+- **待审查（review）**：等待人工审核，可查看改动记录与快照文件统计；也可评论让 agent 在同一隔离工作区继续修改。
+- **已审核（approved）**：正在把任务变更交付到基础分支或原项目目录。
+- **已完成（done）**：Git 分支已合并或快照文件已安全应用，任务隔离工作区已清理。
+- **手动流转**：看板列间拖拽可手动移动任务状态；拖到 `执行中` 会触发 agent 执行，拖到 `已审核` 会触发交付。
 
 ### git 流程
 
@@ -276,6 +275,14 @@ pnpm test:update  # 验证版本、来源、状态和安装命令安全约束
 - **审核通过**：若主工作区当前在基础分支上 → `git merge --no-ff --autostash <taskBranch>`；否则创建临时 worktree 合并后 `update-ref` 更新目标分支。合并失败会捕获冲突文件并执行 `git merge --abort`，不会把主仓库留在半合并状态。
 - **冲突恢复**：在任务 worktree 中把最新基础分支合入任务分支 → 原 Agent 解决冲突 → 系统检查残留冲突标记和未合并索引 → 提交冲突解决结果 → 回到待审查。再次审核通过后才合回基础分支并清理 worktree/任务分支。
 - **评论继续**：复用已有 worktree 和同一个 Agent 会话，追加 followup 继续改码后重新提交；若原会话无法恢复，任务暂停并保留错误，不创建替代会话。
+
+### 非 Git 快照流程
+
+- **模式选择**：非 Git 目录、没有 commit 的仓库以及 Git CLI 不可用的项目自动选择 `snapshot`，不会修改项目或静默执行 `git init`。
+- **隔离执行**：在 `$DSH_HOME/kanban/snapshot-workspaces/<taskId>` 下创建只读语义的基线副本与 Agent 工作副本；`.git`、依赖目录、构建产物和 `.kanban-attachments` 不进入变更集。
+- **变更检测**：以 SHA-256、文件类型和权限比较基线与工作副本，记录新增、修改、删除文件；单任务最多 100000 个文件、5 GiB。
+- **安全应用**：审核时仅检查任务涉及的路径。若原项目对应文件已变化则停止应用并列出冲突；Agent 可参考基线、当前项目和任务版本在隔离副本中重新处理。
+- **恢复保护**：应用前备份全部受影响文件并写入 journal；写入失败或服务中途重启时自动恢复。成功备份保留 7 天，任务工作副本随即清理。
 
 ## 远程 API（ctx.remote.kanban.*）
 

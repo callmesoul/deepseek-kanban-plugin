@@ -20,7 +20,12 @@ export interface Project {
   path: string;
   branch: string;
   git: boolean;
+  gitCliAvailable: boolean;
+  sourceControl: 'git' | 'none';
+  executionMode: ExecutionMode;
 }
+
+export type ExecutionMode = 'git-worktree' | 'snapshot';
 
 export interface AttachmentRef {
   attachmentId: string;
@@ -53,7 +58,7 @@ export interface TaskComment {
 export interface TaskChangeLog {
   id: string;
   summary: string;
-  source: 'agent' | 'git' | 'system';
+  source: 'agent' | 'git' | 'snapshot' | 'system';
   commit: string | null;
   createdAt: string;
 }
@@ -68,6 +73,16 @@ export interface Task {
   baseBranch: string;
   taskBranch: string;
   worktreePath: string;
+  executionMode: ExecutionMode;
+  workspacePath: string;
+  baseRevision: string | null;
+  changeSetId: string | null;
+  backupId: string | null;
+  changeStats: {
+    added: number;
+    modified: number;
+    deleted: number;
+  } | null;
   status: TaskStatus;
   message: string;
   agentSessionId: string | null;

@@ -133,8 +133,8 @@ function selectProject(id: string) {
   form.projectId = id;
   emit('update:selectedProjectId', id);
   const p = props.projects.find((x) => x.id === id);
-  form.baseBranch = p?.branch ?? '';
-  if (p?.git) {
+  form.baseBranch = p?.executionMode === 'git-worktree' ? p.branch : '';
+  if (p?.executionMode === 'git-worktree') {
     void loadBranches(id);
   } else {
     branches.value = [];
@@ -238,16 +238,16 @@ async function submit() {
               </SelectGroup>
             </SelectContent>
           </Select>
-          <FieldDescription v-if="selectedProject && !selectedProject.git">
-            该项目不是 git 仓库，创建后任务会直接进入「暂停中」。
+          <FieldDescription v-if="selectedProject?.executionMode === 'snapshot'">
+            将使用隔离文件快照执行；审核通过前不会修改原项目。
           </FieldDescription>
         </Field>
 
-        <Field>
+        <Field v-if="selectedProject?.executionMode === 'git-worktree'">
           <FieldLabel for="kb-branch">基础分支（默认当前项目分支）</FieldLabel>
           <Select
             :model-value="form.baseBranch"
-            :disabled="!selectedProject?.git || branchesLoading"
+            :disabled="branchesLoading"
             @update:model-value="(value) => (form.baseBranch = value as string)"
           >
             <SelectTrigger id="kb-branch" class="w-full">

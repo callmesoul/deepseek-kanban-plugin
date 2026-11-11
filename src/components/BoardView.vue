@@ -96,8 +96,10 @@ function handleVisibilityChange() {
 async function handleApprove(taskId: string) {
   detailBusy.value = true;
   try {
-    await board.approveTask(taskId);
-    toast.success('已审核，agent 正在合回基础分支');
+    const updated = await board.approveTask(taskId);
+    toast.success(updated.executionMode === 'snapshot'
+      ? '已审核，正在将文件变更应用到项目'
+      : '已审核，agent 正在合回基础分支');
     detailTaskId.value = null;
   } catch (e: any) {
     toast.error(e?.message || '审核失败');

@@ -2,7 +2,29 @@
 
 本文件记录项目的重要变更，格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 
-## [未发布]
+## [0.7.2] - 2026-11-11
+
+### 兼容性
+
+- 放宽 `peerDependencies` 中 `@deepseek-ai/dsh-*` 的范围到 `>=0.1.7-rc.1 <0.3.0-0`，修复在 DSH 0.2.x（含桌面版 0.2.2-rc.1）下被兼容性判定器判为不兼容、安装需手动授予版本豁免的问题。
+- 移除 `dsh.client.inject` 中已不存在的 `@deepseek-ai/dsh-client-runtime`（0.2.x 改由平台 seed 表提供 slots/primitives/store）。
+- 修复桌面版宿主下 `detectProfileName` 恒返回 `web` 的问题：DSH 0.2.x 桌面版把 profile 目录作为位置参数传入，新增按 `profiles/<name>` 路径反查。
+- 修复一键更新在桌面版下必然失败的问题：`process.argv[1]` 在桌面宿主里是 `dsh-desktop-host/lib/index.js` 而非 CLI，改为经 `dsh.cmd` 同款入口（Electron `ELECTRON_RUN_AS_NODE=1` + `--expose-internals`）调用插件管理命令。
+
+### 新增
+
+- 非 Git 目录、无 commit 仓库和 Git CLI 不可用的项目支持隔离文件快照执行，审核前不会修改原项目。
+- 快照任务支持新增、修改、删除文件统计，并在审核时检测原项目并发修改；冲突可交回同一 Agent 会话处理。
+- 新增 `scripts/sync-dsh.mjs`，替代原先只适用于旧 web profile 的部署流程；Windows 下自动把产物中转出 UNC 路径再安装。
+
+### 安全
+
+- 快照应用前备份受影响文件并写入恢复 journal，失败自动回滚；拒绝路径逃逸和符号链接目录穿透，成功备份保留 7 天。
+
+### 测试
+
+- 主机 smoke 测试覆盖非 Git 项目的隔离执行、文件新增/修改/删除、安全应用、并发冲突、Agent 冲突恢复和进程中断后的 journal 恢复。
+- 更新器测试覆盖桌面版 profile 探测、桌面宿主 CLI 调用参数和 `--dshArgs`/`--dshEnv` 解析。
 
 ## [0.7.1] - 2026-09-04
 

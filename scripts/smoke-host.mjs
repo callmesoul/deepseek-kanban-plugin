@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { once } from 'node:events';
 import { tmpdir } from 'node:os';
@@ -12,6 +12,7 @@ import { KanbanService } from '../lib/index.js';
 
 const execFileAsync = promisify(execFile);
 const root = await mkdtemp(join(tmpdir(), 'kanban-smoke-'));
+const nonGitRoot = await mkdtemp(join(tmpdir(), 'kanban-snapshot-smoke-'));
 const dshHome = await mkdtemp(join(tmpdir(), 'kanban-dsh-home-'));
 process.env.DSH_HOME = dshHome;
 
@@ -78,6 +79,7 @@ try {
   let failNextAgentTurn = false;
   let hangNextAgentTurn = false;
   let resolveNextConflict = false;
+  let mutateNextAgentWorkspace = null;
   let turn = 0;
   const registeredRoutes = [];
   const savedAttachments = new Map();
@@ -152,6 +154,9 @@ try {
       },
       followup(message) {
         sentMessages.push(message);
+        const mutation = mutateNextAgentWorkspace;
+        mutateNextAgentWorkspace = null;
+        mutation?.(record.meta.cwd);
         if (resolveNextConflict) {
           resolveNextConflict = false;
           writeFileSync(join(record.meta.cwd, 'file.txt'), 'resolved\n');
@@ -517,6 +522,131 @@ try {
     throw new Error(`expected two change logs, got: ${JSON.stringify(board.tasks[0]?.changeLogs ?? [])}`);
   }
 
+  await writeFile(join(nonGitRoot, 'modify.txt'), 'before\n');
+  await writeFile(join(nonGitRoot, 'delete.txt'), 'remove me\n');
+  const snapshotWorkspace = { id: 'ws-snapshot', title: 'snapshot smoke', path: nonGitRoot };
+  workspaceEntries.push(snapshotWorkspace);
+  const snapshotProject = (await service.listProjects()).find((project) => project.id === snapshotWorkspace.id);
+  if (
+    snapshotProject?.executionMode !== 'snapshot'
+    || snapshotProject.sourceControl !== 'none'
+    || snapshotProject.git !== false
+  ) {
+    throw new Error(`non-git project did not select snapshot mode: ${JSON.stringify(snapshotProject)}`);
+  }
+
+  mutateNextAgentWorkspace = (cwd) => {
+    writeFileSync(join(cwd, 'modify.txt'), 'after\n');
+    writeFileSync(join(cwd, 'added.txt'), 'new file\n');
+    rmSync(join(cwd, 'delete.txt'));
+  };
+  const snapshotTask = await service.createTask({
+    projectId: snapshotWorkspace.id,
+    title: 'snapshot task',
+  });
+  await waitFor(
+    () => table.get(snapshotTask.id)?.status === 'review',
+    'snapshot task to reach review',
+  );
+  const snapshotReview = table.get(snapshotTask.id);
+  if (
+    snapshotReview.executionMode !== 'snapshot'
+    || !snapshotReview.workspacePath
+    || !existsSync(snapshotReview.workspacePath)
+    || snapshotReview.worktreePath
+    || JSON.stringify(snapshotReview.changeStats) !== JSON.stringify({ added: 1, modified: 1, deleted: 1 })
+  ) {
+    throw new Error(`unexpected snapshot review state: ${JSON.stringify(snapshotReview)}`);
+  }
+  if (
+    readFileSync(join(nonGitRoot, 'modify.txt'), 'utf8') !== 'before\n'
+    || existsSync(join(nonGitRoot, 'added.txt'))
+    || !existsSync(join(nonGitRoot, 'delete.txt'))
+  ) {
+    throw new Error('snapshot task changed the original project before approval');
+  }
+  await service.approveTask({ taskId: snapshotTask.id });
+  await waitFor(() => table.get(snapshotTask.id)?.status === 'done', 'snapshot task to apply');
+  const appliedSnapshot = table.get(snapshotTask.id);
+  if (
+    readFileSync(join(nonGitRoot, 'modify.txt'), 'utf8') !== 'after\n'
+    || readFileSync(join(nonGitRoot, 'added.txt'), 'utf8') !== 'new file\n'
+    || existsSync(join(nonGitRoot, 'delete.txt'))
+    || !appliedSnapshot.backupId
+    || existsSync(snapshotReview.workspacePath)
+  ) {
+    throw new Error(`snapshot changes were not safely applied: ${JSON.stringify(appliedSnapshot)}`);
+  }
+
+  await writeFile(join(nonGitRoot, 'conflict.txt'), 'base\n');
+  mutateNextAgentWorkspace = (cwd) => {
+    writeFileSync(join(cwd, 'conflict.txt'), 'task\n');
+  };
+  const snapshotConflictTask = await service.createTask({
+    projectId: snapshotWorkspace.id,
+    title: 'snapshot conflict task',
+  });
+  await waitFor(
+    () => table.get(snapshotConflictTask.id)?.status === 'review',
+    'snapshot conflict task to reach review',
+  );
+  await writeFile(join(nonGitRoot, 'conflict.txt'), 'current\n');
+  await service.approveTask({ taskId: snapshotConflictTask.id });
+  await waitFor(
+    () => table.get(snapshotConflictTask.id)?.status === 'paused',
+    'snapshot conflict task to pause',
+  );
+  const snapshotConflict = table.get(snapshotConflictTask.id);
+  if (
+    JSON.stringify(snapshotConflict.mergeConflictFiles) !== JSON.stringify(['conflict.txt'])
+    || readFileSync(join(nonGitRoot, 'conflict.txt'), 'utf8') !== 'current\n'
+    || !snapshotConflict.message.includes('原项目没有被覆盖')
+  ) {
+    throw new Error(`snapshot conflict was not protected: ${JSON.stringify(snapshotConflict)}`);
+  }
+
+  mutateNextAgentWorkspace = (cwd) => {
+    writeFileSync(join(cwd, 'conflict.txt'), 'resolved snapshot\n');
+  };
+  await service.resumeTask({ taskId: snapshotConflictTask.id });
+  await waitFor(
+    () => table.get(snapshotConflictTask.id)?.status === 'review',
+    'snapshot conflict task to return to review',
+  );
+  await service.approveTask({ taskId: snapshotConflictTask.id });
+  await waitFor(
+    () => table.get(snapshotConflictTask.id)?.status === 'done',
+    'resolved snapshot task to apply',
+  );
+  if (readFileSync(join(nonGitRoot, 'conflict.txt'), 'utf8') !== 'resolved snapshot\n') {
+    throw new Error('resolved snapshot content was not applied');
+  }
+
+  const interruptedJournalPath = join(
+    dshHome,
+    'kanban',
+    'snapshot-backups',
+    snapshotTask.id,
+    appliedSnapshot.backupId,
+    'apply-journal.json',
+  );
+  const interruptedJournal = JSON.parse(readFileSync(interruptedJournalPath, 'utf8'));
+  await writeFile(interruptedJournalPath, JSON.stringify({ ...interruptedJournal, status: 'applying' }));
+  table.map.set(snapshotTask.id, { ...appliedSnapshot, status: 'approved' });
+  const recoveryService = new KanbanService(ctx);
+  await recoveryService[Service.init]();
+  const recoveredSnapshot = table.get(snapshotTask.id);
+  if (
+    recoveredSnapshot.status !== 'paused'
+    || !recoveredSnapshot.message.includes('已从备份恢复原项目')
+    || readFileSync(join(nonGitRoot, 'modify.txt'), 'utf8') !== 'before\n'
+    || existsSync(join(nonGitRoot, 'added.txt'))
+    || readFileSync(join(nonGitRoot, 'delete.txt'), 'utf8') !== 'remove me\n'
+  ) {
+    throw new Error(`interrupted snapshot apply was not recovered: ${JSON.stringify(recoveredSnapshot)}`);
+  }
+  await service.deleteTask({ taskId: snapshotTask.id });
+
   const conflictTask = await service.createTask({ projectId: workspace.id, title: 'conflict task' });
   await waitFor(
     async () => (await service.getBoard()).tasks.find((item) => item.id === conflictTask.id)?.status === 'review',
@@ -748,6 +878,7 @@ try {
 } finally {
   await rm(`${root}.kanban-worktrees`, { recursive: true, force: true });
   await rm(root, { recursive: true, force: true });
+  await rm(nonGitRoot, { recursive: true, force: true });
   await rm(dshHome, { recursive: true, force: true });
 }
 

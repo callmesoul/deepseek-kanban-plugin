@@ -1,53 +1,35 @@
 #!/usr/bin/env bash
-# deploy-local.sh — 一键部署插件到本地宿主（file: 模式）并修复 peer 双实例坑。
+# deploy-local.sh — 一键部署插件到本机 DSH 宿主（file: 模式）。
 #
-# 背景：pnpm 装插件会把 peer 依赖（@deepseek-ai/*、zod）装成插件内部独立拷贝，
-# 与全局 dsh 宿主是不同模块实例，导致 typert Remote marker 的 WeakMap
-# 不共享、SRC claims 全空、所有 /api/* 404。必须在每次 pnpm 重装后把插件内部
-# 的 @deepseek-ai / zod 指回全局 DSH 的同一份。
+# DSH 0.2.x 起，profile 内插件与本机 DSH 安装树共享同一份 @deepseek-ai/* 与 zod
+# （由 app-boot 的运行时解析器统一路由），因此不再需要旧版脚本里手工 `ln -sfn`
+# 指回全局依赖的做法 —— 那套做法针对的是 0.1.x 的独立 node_modules 布局。
 #
-# 用法：在 WSL 内执行  bash scripts/deploy-local.sh
+# 本脚本只是 scripts/sync-dsh.mjs 的薄包装：真正的安装逻辑（CLI 探测、UNC 中转、
+# 版本校验）都在那里，跨平台（Windows 桌面版 / WSL / macOS）共用一份。
+#
+# 用法：
+#   bash scripts/deploy-local.sh                # 构建 + 装进 desktop profile
+#   bash scripts/deploy-local.sh --profile web  # 装进其他 profile
+#   bash scripts/deploy-local.sh -h             # 查看全部选项
 set -euo pipefail
 
-export PATH="$HOME/.nvm/versions/node/v22.19.0/bin:$PATH"
-export XDG_RUNTIME_DIR="/run/user/$(id -u)"
+PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$PROJECT_DIR"
 
-PROJECT_DIR="/home/callmesoul/code/deepseek-kanban-plugin"
-PROFILE_DIR="$HOME/.dsh/profiles/web"
-GLOBAL_DSH_DIR="$(npm root -g)/@deepseek-ai/dsh"
-GLOBAL_DSH_PEERS="$GLOBAL_DSH_DIR/node_modules"
+echo "[1/2] pnpm build ..."
+pnpm build
 
-if [[ ! -d "$GLOBAL_DSH_PEERS/@deepseek-ai" || ! -d "$GLOBAL_DSH_PEERS/zod" ]]; then
-  echo "找不到全局 DSH peer 依赖目录：$GLOBAL_DSH_PEERS" >&2
-  exit 1
+# Windows 版 pnpm 装的是 Windows 路径下的 file: 依赖，因此在 WSL 里必须调用
+# Windows 侧的 node 来跑安装脚本；纯 Linux 环境则直接用本机的 node。
+NODE_BIN="$(command -v node)"
+if [[ "$(uname -r)" == *[Mm]icrosoft* ]] && command -v node.exe >/dev/null 2>&1; then
+  NODE_BIN="$(command -v node.exe)"
+  SCRIPT_PATH="$(wslpath -w "$PROJECT_DIR/scripts/sync-dsh.mjs")"
+  echo "[2/2] 通过 Windows 侧 node 安装到 DSH profile ..."
+else
+  SCRIPT_PATH="$PROJECT_DIR/scripts/sync-dsh.mjs"
+  echo "[2/2] 安装到 DSH profile ..."
 fi
 
-cd "$PROJECT_DIR"
-echo "[1/4] pnpm build ..."
-pnpm build >/dev/null
-
-echo "[2/4] 重新安装插件到 profile（file: 复制）..."
-pnpm --dir "$PROFILE_DIR" remove @deepseek-kanban/plugin >/dev/null
-pnpm --dir "$PROFILE_DIR" add "file:$PROJECT_DIR" >/dev/null
-
-echo "[3/4] 修复 peer 双实例（symlink 指回全局 DSH）..."
-# file: 复制不带 node_modules；手动建插件内部 node_modules 并让 peer 指向全局 DSH 的
-# 同一份（否则插件与 dsh 各加载一份 dsh-typert-protocol，Remote marker 不共享 → /api/* 404）。
-PLUGIN_NM="$PROFILE_DIR/node_modules/@deepseek-kanban/plugin/node_modules"
-mkdir -p "$PLUGIN_NM"
-ln -sfn "$GLOBAL_DSH_PEERS/@deepseek-ai" "$PLUGIN_NM/@deepseek-ai"
-ln -sfn "$GLOBAL_DSH_PEERS/zod" "$PLUGIN_NM/zod"
-
-echo "[4/4] 重启 dsh-web 并自检 RPC ..."
-systemctl --user restart dsh-web
-sleep 3
-systemctl --user is-active dsh-web
-
-RESP=$(curl -s -X POST http://127.0.0.1:3080/api/kanban/getBoard -H "Content-Type: application/json" \
-  -d '{"type":"client-request","rpcId":"deploy-check","method":"kanban/getBoard","payload":{"args":{}}}')
-echo "getBoard RPC: $RESP" | head -c 200
-echo
-case "$RESP" in
-  *'"ok":true'*) echo "✅ 部署成功：kanban API 正常" ;;
-  *) echo "❌ 部署失败：kanban API 异常，请检查" ; exit 1 ;;
-esac
+"$NODE_BIN" "$SCRIPT_PATH" "$@"

@@ -27,7 +27,9 @@ function onDragStart(e: DragEvent) {
     <CardContent class="p-3 pt-0">
       <div class="flex items-center gap-2">
         <KanbanStatusBadge :s="task.status">{{ STATUS_LABEL[task.status] }}</KanbanStatusBadge>
-        <span class="text-xs text-muted-foreground truncate">{{ task.taskBranch }}</span>
+        <span class="text-xs text-muted-foreground truncate">
+          {{ task.executionMode === 'snapshot' ? '文件快照' : task.taskBranch }}
+        </span>
       </div>
       <p v-if="task.message" class="mt-2 text-xs text-muted-foreground line-clamp-2">
         {{ task.message }}

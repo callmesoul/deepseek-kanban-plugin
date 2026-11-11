@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-kanban/plugin",
-  "version": "0.7.1",
-  "description": "DeepSeek Harness 任务看板插件（主机状态机 + git 调度 + 浏览器看板 UI）",
+  "version": "0.7.2",
+  "description": "DeepSeek Harness 任务看板插件（主机状态机 + Git/快照工作区调度 + 浏览器看板 UI）",
   "type": "module",
   "main": "lib/index.js",
   "exports": {
@@ -24,7 +24,7 @@
     "test": "pnpm test:smoke && pnpm test:update",
     "test:smoke": "node scripts/smoke-host.mjs",
     "test:update": "node scripts/test-update.mjs",
-    "sync:dsh": "pnpm build && pnpm --dir \"$HOME/.dsh/profiles/web\" remove @deepseek-kanban/plugin && pnpm --dir \"$HOME/.dsh/profiles/web\" add \"file:$(pwd)\""
+    "sync:dsh": "pnpm build && node scripts/sync-dsh.mjs"
   },
   "dsh": {
     "bundle": {
@@ -32,7 +32,6 @@
     },
     "client": {
       "inject": [
-        "@deepseek-ai/dsh-client-runtime",
         "@deepseek-ai/dsh-client-connection",
         "@deepseek-ai/dsh-api-gateway",
         "@deepseek-ai/dsh-api-remotes",
@@ -45,10 +44,10 @@
   },
   "license": "MIT",
   "peerDependencies": {
-    "@deepseek-ai/cordis": "^4.0.1",
-    "@deepseek-ai/dsh-llm": "^0.1.0-rc.6",
-    "@deepseek-ai/dsh-storage-domain": "^0.1.0-rc.6",
-    "@deepseek-ai/dsh-typert-protocol": "^0.1.0-rc.6",
+    "@deepseek-ai/cordis": ">=4.0.1-rc.1 <5.0.0 || >=4.0.2 <5.0.0",
+    "@deepseek-ai/dsh-llm": ">=0.1.7-rc.1 <0.3.0-0",
+    "@deepseek-ai/dsh-storage-domain": ">=0.1.7-rc.1 <0.3.0-0",
+    "@deepseek-ai/dsh-typert-protocol": ">=0.1.7-rc.1 <0.3.0-0",
     "zod": "^4.4.3"
   },
   "devDependencies": {

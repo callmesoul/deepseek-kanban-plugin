@@ -61,6 +61,8 @@ const projectFilesCache = new Map<string, Promise<ProjectFile[]>>();
 
 const taskBranch = computed(() => task.value?.taskBranch || '—');
 const baseBranch = computed(() => task.value?.baseBranch || '—');
+const isSnapshot = computed(() => task.value?.executionMode === 'snapshot');
+const workspacePath = computed(() => task.value?.workspacePath || task.value?.worktreePath || '');
 const canResume = computed(() => task.value?.status === 'paused' || task.value?.status === 'todo');
 const hasMergeConflicts = computed(() => Boolean(task.value?.mergeConflictFiles.length));
 const canApprove = computed(() => task.value?.status === 'review' || task.value?.status === 'approved');
@@ -124,9 +126,10 @@ const taskRecords = computed<TaskRecord[]>(() => {
   ];
 });
 
-function changeSourceLabel(source: 'agent' | 'git' | 'system') {
+function changeSourceLabel(source: 'agent' | 'git' | 'snapshot' | 'system') {
   if (source === 'agent') return 'Agent 说明';
   if (source === 'git') return 'Git 变更';
+  if (source === 'snapshot') return '文件快照';
   return '系统记录';
 }
 
@@ -199,8 +202,17 @@ const metaRows = computed(() => {
         ? new Date(task.value.executeAt).toLocaleString()
         : '立即执行',
     },
-    ...(task.value.worktreePath
-      ? [{ label: 'Worktree', value: task.value.worktreePath }]
+    ...(workspacePath.value
+      ? [{ label: isSnapshot.value ? '隔离副本' : 'Worktree', value: workspacePath.value }]
+      : []),
+    ...(task.value.changeStats
+      ? [{
+          label: '文件变更',
+          value: `新增 ${task.value.changeStats.added} / 修改 ${task.value.changeStats.modified} / 删除 ${task.value.changeStats.deleted}`,
+        }]
+      : []),
+    ...(task.value.backupId
+      ? [{ label: '备份 ID', value: task.value.backupId }]
       : []),
     ...(task.value.agentSessionId
       ? [{ label: 'Agent 会话', value: task.value.agentSessionId, copyable: true }]
@@ -217,10 +229,13 @@ const metaRows = computed(() => {
           <div class="flex items-start gap-3">
             <div class="min-w-0 flex-1">
               <SheetTitle class="text-base leading-snug">{{ task.title }}</SheetTitle>
-              <SheetDescription class="mt-1 flex items-center gap-2">
+              <SheetDescription v-if="!isSnapshot" class="mt-1 flex items-center gap-2">
                 <Badge variant="secondary">{{ baseBranch }}</Badge>
                 <span class="text-muted-foreground">→</span>
                 <Badge variant="secondary">{{ taskBranch }}</Badge>
+              </SheetDescription>
+              <SheetDescription v-else class="mt-1">
+                <Badge variant="secondary">隔离文件快照</Badge>
               </SheetDescription>
             </div>
             <KanbanStatusBadge :s="task.status">
@@ -305,7 +320,7 @@ const metaRows = computed(() => {
             </div>
             <AgentComposer
               v-model="commentDraft"
-              :project-root="task.worktreePath"
+              :project-root="workspacePath"
               :resolve-files="resolveProjectFiles"
               placeholder="输入评论，使用 @ 引用项目文件…"
               :disabled="busy || preparingComment"
@@ -339,7 +354,7 @@ const metaRows = computed(() => {
           >
             <Spinner v-if="busy" data-icon="inline-start" />
             <Check v-else data-icon="inline-start" />
-            审核通过并合回
+            {{ isSnapshot ? '审核通过并应用到项目' : '审核通过并合回' }}
           </Button>
           <Button
             variant="destructive"
@@ -360,7 +375,9 @@ const metaRows = computed(() => {
       <DialogHeader>
         <DialogTitle>确认删除任务？</DialogTitle>
         <DialogDescription>
-          对应的 Worktree 和任务分支会被永久删除。此操作无法撤销。
+          {{ isSnapshot
+            ? '对应的隔离文件快照会被永久删除。此操作无法撤销。'
+            : '对应的 Worktree 和任务分支会被永久删除。此操作无法撤销。' }}
         </DialogDescription>
       </DialogHeader>
       <DialogFooter>
