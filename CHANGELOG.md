@@ -2,6 +2,13 @@
 
 本文件记录项目的重要变更，格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.7.3] - 2026-11-12
+
+### 修复
+
+- 修复启用插件后桌面版无法启动（`web boot: 1 entry did not activate / @deepseek-kanban/plugin: failed`）的问题：客户端 Remote descriptor 的 strict codec 缺少 `create()` 工厂，被 DSH 0.2.x 的 `typert` 注册表校验拒绝（`typert: ... strict codec has no create() factory`）而整批注册失败，导致插件 fiber 进入 failed 状态并中止宿主启动。
+- 客户端 `apply()` 改为按段落隔离失败：样式注入、快捷键、Remote 挂载、虚拟工作区、侧边栏入口、看板浮层、更新提示各自独立兜底，任一环节出错只降级对应功能并打印 `[kanban] ... failed`，不再让整个插件 fiber 失败、拖垮宿主启动。
+
 ## [0.7.2] - 2026-11-11
 
 ### 兼容性

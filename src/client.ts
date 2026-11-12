@@ -407,53 +407,97 @@ function UpdateNotifierSlot(props: { kanbanApi: KanbanApi }) {
 // ── plugin entry ────────────────────────────────────────────────────────────
 export const inject = ['slots', 'remote', 'workspaces'];
 
+/**
+ * Boot must never fail as a whole: a throwing `apply()` turns this fiber into
+ * `failed`, and the shell then aborts startup with
+ * `web boot: N entries did not activate`. Each optional segment is therefore
+ * isolated, so a regression in one panel degrades that panel only.
+ */
+function guarded(label: string, run: () => void): boolean {
+  try {
+    run();
+    return true;
+  } catch (error) {
+    console.error(`[kanban] ${label} failed`, error);
+    return false;
+  }
+}
+
 export async function apply(ctx: any) {
-  injectStyles();
-  setupToggleHotkey();
-  const remote = ctx.get('remote');
-  await remote.$mount(KANBAN_REMOTE);
-  const kanbanApi = ctx.get('remote.kanban');
-  // 暴露到 window：作为 useKanbanApi() 的兜底来源，也便于在控制台诊断远程调用。
+  guarded('stylesheet injection', injectStyles);
+  guarded('toggle hotkey', setupToggleHotkey);
+
+  const kanbanApi = await mountRemote(ctx);
   (window as any).__kanbanApi = kanbanApi;
 
-  ctx.effect(
-    () => installVirtualKanbanWorkspace(ctx, kanbanApi),
-    'kanban.virtualWorkspace',
-  );
+  if (kanbanApi) {
+    guarded('virtual kanban workspace', () => {
+      ctx.effect(
+        () => installVirtualKanbanWorkspace(ctx, kanbanApi),
+        'kanban.virtualWorkspace',
+      );
+    });
+  }
 
-  ctx.slots.inject('sidebar.footer.action', () =>
-    ctx.slots.register(
-      {
-        name: 'sidebar.footer.action',
-        id: 'kanban',
-        order: 50,
-        inject: () => ({ onOpen: () => setOverlayOpen(!getOverlayOpen()) }),
-      },
-      SidebarKanbanMenu as any,
-    ),
-  );
+  guarded('sidebar footer action', () => {
+    ctx.slots.inject('sidebar.footer.action', () =>
+      ctx.slots.register(
+        {
+          name: 'sidebar.footer.action',
+          id: 'kanban',
+          order: 50,
+          inject: () => ({ onOpen: () => setOverlayOpen(!getOverlayOpen()) }),
+        },
+        SidebarKanbanMenu as any,
+      ),
+    );
+  });
 
-  ctx.slots.inject('shell.overlay', () =>
-    ctx.slots.register(
-      {
-        name: 'shell.overlay',
-        id: 'kanban',
-        order: 50,
-        inject: () => ({ kanbanApi }),
-      },
-      KanbanOverlay as any,
-    ),
-  );
+  if (kanbanApi) {
+    guarded('kanban overlay', () => {
+      ctx.slots.inject('shell.overlay', () =>
+        ctx.slots.register(
+          {
+            name: 'shell.overlay',
+            id: 'kanban',
+            order: 50,
+            inject: () => ({ kanbanApi }),
+          },
+          KanbanOverlay as any,
+        ),
+      );
+    });
 
-  ctx.slots.inject('shell.overlay', () =>
-    ctx.slots.register(
-      {
-        name: 'shell.overlay',
-        id: 'kanban-update',
-        order: 60,
-        inject: () => ({ kanbanApi }),
-      },
-      UpdateNotifierSlot as any,
-    ),
-  );
+    guarded('update notifier', () => {
+      ctx.slots.inject('shell.overlay', () =>
+        ctx.slots.register(
+          {
+            name: 'shell.overlay',
+            id: 'kanban-update',
+            order: 60,
+            inject: () => ({ kanbanApi }),
+          },
+          UpdateNotifierSlot as any,
+        ),
+      );
+    });
+  }
+
+  return undefined;
+}
+
+/**
+ * Mount the `kanban` Remote namespace and return its service handle.
+ *
+ * Failures are logged instead of rethrown: an unmounted namespace only costs
+ * the board itself, while a thrown error would take the whole shell boot down.
+ */
+async function mountRemote(ctx: any): Promise<KanbanApi | undefined> {
+  try {
+    await ctx.get('remote').$mount(KANBAN_REMOTE);
+    return ctx.get('remote.kanban') as KanbanApi;
+  } catch (error) {
+    console.error('[kanban] remote mount failed', error);
+    return undefined;
+  }
 }
